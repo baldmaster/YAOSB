@@ -1,0 +1,21 @@
+{
+  "name": "seabattle",
+  "version": "1.0.0",
+  "description": "Yet another one sea battle",
+  "main": "index.js",
+  "scripts": {
+    "test": "mocha --timeout 10000 --recursive"
+  },
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "mocha": "^3.4.2",
+    "should": "^11.2.1",
+    "socket.io-client": "^2.0.3"
+  },
+  "dependencies": {
+    "express": "^4.15.3",
+    "socket.io": "^2.0.3",
+    "uuid": "^3.1.0"
+  }
+}
