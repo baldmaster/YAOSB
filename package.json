@@ -15,6 +15,8 @@
   },
   "dependencies": {
     "express": "^4.15.3",
+    "nedb": "^1.8.0",
+    "nedb-promise": "^2.0.1",
     "socket.io": "^2.0.3",
     "uuid": "^3.1.0"
   }
