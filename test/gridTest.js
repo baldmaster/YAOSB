@@ -2,7 +2,7 @@ const should = require('should')
 const { generateRandomGrid,
         generateVesselsMap,
         validateGrid,
-        generateEmptyGrid } = require('../src/helpers');
+        generateEmptyGrid } = require('../src/helpers')
 
 describe('Grid helpers test', () => {
   let validGrid
@@ -13,7 +13,7 @@ describe('Grid helpers test', () => {
 
     emptyGrid.should.be.Array()
     emptyGrid.length.should.be.equal(10)
-    
+
     emptyGrid.forEach(row => {
       row.should.be.Array()
       row.length.should.be.equal(10)
@@ -26,10 +26,10 @@ describe('Grid helpers test', () => {
 
     done()
   })
-  
+
   it('Should validate valid random grid', done => {
     let grid = generateRandomGrid()
-    
+
     let valid = validateGrid(grid)
 
     should(valid).exist
@@ -40,7 +40,7 @@ describe('Grid helpers test', () => {
 
   it('Should return "false" for invalid grid', done => {
     let grid = generateEmptyGrid()
-    
+
     let valid = validateGrid(grid)
 
     should(valid).be.equal(false)
@@ -62,8 +62,7 @@ describe('Grid helpers test', () => {
 
     valid = validateGrid(grid)
     should(valid).be.equal(false)
-    
+
     done()
   })
-
 })

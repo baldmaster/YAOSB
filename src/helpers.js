@@ -1,4 +1,4 @@
-function generateEmptyGrid() {
+function generateEmptyGrid () {
   let grid = Array(10).fill()
 
   for (let i in grid) {
@@ -26,7 +26,7 @@ const HALO = [[-1, 0],
               [1, -1],
               [1, 1]]
 
-function generateRandomGrid() {
+function generateRandomGrid () {
   let grid = generateEmptyGrid()
 
   let occupied = new Set()
@@ -41,7 +41,7 @@ function generateRandomGrid() {
       do {
         points = []
         let [xDir, yDir] = dir ? [0, sig] : [sig, 0]
-        
+
         let x = Math.floor(Math.random() * 10)
         let y = Math.floor(Math.random() * 10)
 
@@ -57,8 +57,8 @@ function generateRandomGrid() {
           }
 
           points.push([x, y])
-          
-          if (n + 1 == i) {
+
+          if (n + 1 === i) {
             settled = true
           }
         }
@@ -72,7 +72,7 @@ function generateRandomGrid() {
           occupied.add((x + a) * 10 + (y + b))
         }
       }
-  
+
       j--
     }
   }
@@ -80,28 +80,28 @@ function generateRandomGrid() {
   return grid
 }
 
-function generateVesselsMap(grid) {
+function generateVesselsMap (grid) {
   let checked = new Set()
   let vessels = new Map()
   vessels.set('bySize', new Map())
 
   grid.forEach((row, i) => {
     row.forEach((cell, j) => {
-      if (cell == 1 && !checked.has(i * 10 + j)) {
+      if (cell === 1 && !checked.has(i * 10 + j)) {
         let ship = [[i, j]]
 
         for (let [x, y] of ADJACENT) {
           let [a, b] = [i + x, j + y]
 
-          while(grid[a] && grid[a][b]) {
-            ship.push([a,b])
+          while (grid[a] && grid[a][b]) {
+            ship.push([a, b])
             a += x
             b += y
           }
         }
         let size = ship.length
         let vessel = new Set()
-        
+
         for (let [x, y] of ship) {
           let point = x * 10 + y
           vessel.add(point)
@@ -115,8 +115,7 @@ function generateVesselsMap(grid) {
 
         if (vessels.get('bySize').has(size)) {
           vessels.get('bySize').get(size).push(vessel)
-        }
-        else {
+        } else {
           vessels.get('bySize').set(size, [vessel])
         }
       }
@@ -126,13 +125,13 @@ function generateVesselsMap(grid) {
   return vessels
 }
 
-function validateGrid(grid) {
-  if (!grid instanceof Array || grid.length !== 10) {
+function validateGrid (grid) {
+  if (!(grid instanceof Array) || grid.length !== 10) {
     return false
   }
 
   if (grid.some(row => {
-    return !row instanceof Array || row.length !== 10
+    return !(row instanceof Array) || row.length !== 10
   })) {
     return false
   }
@@ -144,7 +143,6 @@ function validateGrid(grid) {
       (!ships.get(3) || ships.get(3).length !== 2) ||
       (!ships.get(4) || ships.get(4).length !== 1) ||
       (Array.from(ships.keys()).find(k => k > 4))) {
-
     return false
   }
 
@@ -152,6 +150,6 @@ function validateGrid(grid) {
 }
 
 module.exports = {generateRandomGrid,
-                  generateEmptyGrid,
-                  generateVesselsMap,
-                  validateGrid}
+  generateEmptyGrid,
+  generateVesselsMap,
+  validateGrid}

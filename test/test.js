@@ -1,7 +1,9 @@
 const should = require('should')
-const { execFile } = require('child_process');
+const { execFile } = require('child_process')
 
 let server
+
+let gameId
 let clientA
 let clientB
 let clientAData
@@ -13,29 +15,29 @@ describe('Battleship test', () => {
 
   after(() => setTimeout(() => server.close()))
 
-  it ('Server should exist', done => {
+  it('Server should exist', done => {
     server.should.exist
 
     done()
-
   })
 
-  it ('Client should connect to server and get welcome response', done => {
+  it('Client should connect to server and get welcome response', done => {
     let client = require('socket.io-client')(`http://localhost:8080`)
 
-    client.on('welcome', function(data) {
+    client.on('welcome', function (data) {
       data.should.be.equal('Welcome to seabattle game!')
 
       done()
     })
   })
 
-  it ('Client should successfully create new game', done => {
+  it('Client should successfully create new game', done => {
     let client = require('socket.io-client')(`http://localhost:8080`)
 
-    client.on('create', function(data) {
+    client.on('create', function (data) {
       data.should.have.property('gameId')
       data.gameId.length.should.be.equal(36)
+      gameId = data.gameId
       clientA = client
       done()
     })
@@ -43,12 +45,10 @@ describe('Battleship test', () => {
     client.emit('create')
   })
 
-  it ('Client should successfully join game', done => {
+  it('Client should successfully join game', done => {
     let client = require('socket.io-client')(`http://localhost:8080`)
 
     client.on('games available', games => {
-      let gameId = games[0]
-
       client.emit('join', {gameId})
     })
 
@@ -62,7 +62,7 @@ describe('Battleship test', () => {
       clientAData = data
     })
 
-    client.on('join', function(data) {
+    client.on('join', function (data) {
       data.should.have.properties(['info'])
       clientB = client
     })
@@ -80,9 +80,7 @@ describe('Battleship test', () => {
     })
   })
 
-
-  it ('Client should get error when it\'s not his turn', done => {
-
+  it('Client should get error when it\'s not his turn', done => {
     let client = clientAData.move
         ? clientB
         : clientA
@@ -94,17 +92,15 @@ describe('Battleship test', () => {
       done()
     })
 
-    client.emit('turn', {x: 0, y: 5})
+    client.emit('turn', {gameId, x: 0, y: 5})
   })
-
 
   let player
   let opponent
   let playerGrid
   let opponentGrid
 
-  it ('Player should successfully make a turn and miss', done => {
-
+  it('Player should successfully make a turn and miss', done => {
     [player, opponent,
      playerGrid, opponentGrid] = clientAData.move
         ? [clientA, clientB, clientAData.grid, clientBData.grid]
@@ -128,14 +124,14 @@ describe('Battleship test', () => {
         'x', 'y', 'hit'
       ])
 
-      data.hit.should.be.equal(0)
+      data.hit.should.be.equal(false)
       done()
     })
 
-    player.emit('turn', {x, y})
+    player.emit('turn', {gameId, x, y})
   })
 
-  it ('Opponent should successfully make a turn and miss', done => {
+  it('Opponent should successfully make a turn and miss', done => {
     opponent.removeListener('turn')
 
     let x = 0
@@ -143,7 +139,7 @@ describe('Battleship test', () => {
 
     for (let i in playerGrid[0]) {
       if (playerGrid[0][i] == 0) {
-        y = i
+        y = +i
         break
       }
     }
@@ -154,14 +150,14 @@ describe('Battleship test', () => {
         'x', 'y', 'hit'
       ])
 
-      data.hit.should.be.equal(0)
+      data.hit.should.be.equal(false)
       done()
     })
 
-    opponent.emit('turn', {x, y})
+    opponent.emit('turn', {gameId, x, y})
   })
 
-  it ('Player should successfully make a turn and hit', done => {
+  it('Player should successfully make a turn and hit', done => {
     player.removeListener('turn')
 
     let x
@@ -170,9 +166,9 @@ describe('Battleship test', () => {
     for (let i in opponentGrid) {
       for (let j in opponentGrid[i]) {
         if (opponentGrid[i][j] == 1) {
-          y = j
-          x = i
-        break
+          y = +j
+          x = +i
+          break
         }
       }
 
@@ -187,23 +183,22 @@ describe('Battleship test', () => {
         'x', 'y', 'hit'
       ])
 
-      data.hit.should.be.equal(1)
+      data.hit.should.be.true
       done()
     })
 
-    player.emit('turn', {x, y})
+    player.emit('turn', {gameId, x, y})
   })
 
-  it ('Player should successfully make another turn after hit', done => {
+  it('Player should successfully make another turn after hit', done => {
     player.removeListener('turn')
 
     let x = 0
     let y
 
-
     for (let i in opponentGrid[0]) {
       if (opponentGrid[0][i] == 0) {
-        y = i
+        y = +i
         break
       }
     }
@@ -214,14 +209,14 @@ describe('Battleship test', () => {
         'x', 'y', 'hit'
       ])
 
-      data.hit.should.be.equal(0)
+      data.hit.should.be.equal(false)
       done()
     })
 
-    player.emit('turn', {x, y})
+    player.emit('turn', {gameId, x, y})
   })
 
-  it ('Opponent should successfully make a turn and hit', done => {
+  it('Opponent should successfully make a turn and hit', done => {
     opponent.removeListener('turn')
 
     let x
@@ -230,9 +225,9 @@ describe('Battleship test', () => {
     for (let i in playerGrid) {
       for (let j in playerGrid[i]) {
         if (playerGrid[i][j] == 1) {
-          y = j
-          x = i
-        break
+          y = +j
+          x = +i
+          break
         }
       }
 
@@ -247,14 +242,14 @@ describe('Battleship test', () => {
         'x', 'y', 'hit'
       ])
 
-      data.hit.should.be.equal(1)
+      data.hit.should.be.equal(true)
       done()
     })
 
-    opponent.emit('turn', {x, y})
+    opponent.emit('turn', {gameId, x, y})
   })
 
-  it ('Opponent should successfully make another turn after hit', done => {
+  it('Opponent should successfully make another turn after hit', done => {
     opponent.removeListener('turn')
 
     let x = 0
@@ -262,7 +257,7 @@ describe('Battleship test', () => {
 
     for (let i in playerGrid[0]) {
       if (playerGrid[0][i] == 0) {
-        y = i
+        y = +i
         break
       }
     }
@@ -273,10 +268,10 @@ describe('Battleship test', () => {
         'x', 'y', 'hit'
       ])
 
-      data.hit.should.be.equal(0)
+      data.hit.should.be.equal(false)
       done()
     })
 
-    opponent.emit('turn', {x, y})
+    opponent.emit('turn', {gameId, x, y})
   })
 })

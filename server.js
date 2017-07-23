@@ -1,88 +1,104 @@
 const uuid = require('uuid')
 const {validateGrid} = require('./src/helpers')
-const Game = require('./src/game')
+const Database = require('nedb-promise')
+const {Game, Player} = require('./src/game')
 
-let games = new Map()
-
-let userGameMap = new Map()
+let Games = new Map()
 
 let io = require('socket.io')(8080)
+let db = new Database({filename: './db/games', autoload: true})
 
-io.on('connection', function (socket) {
-  socket.emit('welcome', 'Welcome to seabattle game!')
+async function getAvailableGames () {
+  return db.find({}, {'playerA.grid': 0})
+}
 
-  socket.emit('games available', Array.from(games.keys()))
-  
+io.on('connection', async function (socket) {
   socket.on('disconnect', function () {
-    let gameId = userGameMap.get(socket)
-    if (gameId) {
-      let gameData = games.get(gameId)
 
-      if (gameData) {
-        let sock = socket == gameData.socketA
-            ? gameData.socketB
-            : gameData.socketA
-
-        if (sock) {
-          sock.emit('info', 'Opponent disconnected!')
-          userGameMap.delete(sock)
-        }
-        games.delete(gameId)
-        userGameMap.delete(socket)
-      }
-    }
   })
 
-  socket.on('create', function(grid) {
+  socket.on('create', async function (grid, userName) {
     let gameId = uuid.v4()
 
-    userGameMap.set(socket, gameId)
+    let gameObject = {
+      _id: gameId,
+      playerA: {
+        id: socket.id,
+        grid,
+        userName
+      },
+      createdAt: Date.now()
+    }
 
-    games.set(gameId, {socketA: socket, gridA: grid})
-    
+    let game = await db.insert(gameObject)
+
     socket.emit('create', {gameId})
   })
 
-  socket.on('join', function(data) {
+  socket.on('join', async function (data) {
     if (!data || !data.gameId) {
       socket.emit('join', {error: 'gameId not specified'})
 
       return
     }
 
-    if (!games.has(data.gameId)) {
+    let gameData = await db.findOne({_id: data.gameId})
+
+    if (!gameData) {
       socket.emit('join', {error: 'Wrong game id'})
       return
     }
 
-    let gameData = games.get(data.gameId)
-
-    if (gameData.socketB) {
+    if (gameData.started) {
       socket.emit('join', {error: 'Cannot join, game in progress'})
-    }
-    else {
-      userGameMap.set(socket, data.gameId)
-      games.set(data.gameId, Object.assign(gameData, {socketB: socket,
-                                                      gridB: data.grid}))
+    } else {
+      let updateData = {
+        playerB: {
+          id: socket.id,
+          grid: data.grid,
+          userName: data.userName
+        },
+        started: true
+      }
 
-      gameData.game = new Game(gameData)
+      let game = new Game(new Player(gameData.playerA.id,
+                                     gameData.playerA.grid),
+                          new Player(socket.id,
+                                     data.grid))
 
-      socket.emit('join', {success: true,
-                           info: 'You successfully joined the game'})
+      Games.set(data.gameId, game)
 
-      let [a, b] = gameData.game.whoseTurn.socket === socket
+      socket.emit('join', {success: true, info: 'You successfully joined the game'})
+
+      let [a, b] = game.whoseTurn === socket.id
           ? [true, false]
           : [false, true]
 
       socket.emit('start',
-                  {move: a,
-                   grid: gameData.game.playerB.trackingGrid})
+        {move: a,
+         grid: game.playerB.grid})
 
-      gameData.socketA.emit('start',
-                            {move: b,
-                             grid: gameData.game.playerA.trackingGrid})
+      io.of('/').connected[gameData.playerA.id].emit(
+          'start',
+        {move: b,
+         grid: game.playerA.grid})
     }
   })
+
+  socket.on('turn', function (data) {
+    let game = Games.get(data.gameId)
+
+    if (!game) {
+      socket.emit('turn', {error: 'Game not exists'})
+    }
+
+    let resp = game.turn(socket.id, data)
+
+    socket.emit('turn', resp)
+  })
+
+  socket.emit('welcome', 'Welcome to seabattle game!')
+  socket.emit('Games available', await getAvailableGames())
 })
 
 module.exports = io
