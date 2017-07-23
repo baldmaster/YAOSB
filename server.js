@@ -18,7 +18,6 @@ async function getAvailableGames () {
 
 io.on('connection', async function (socket) {
   socket.on('disconnect', function () {
-
   })
 
   socket.on('create', async function (grid, userName) {
@@ -49,7 +48,10 @@ io.on('connection', async function (socket) {
     try {
       await db.insert(gameObject)
 
-      socket.emit('create', {gameId})
+      socket.emit('create', {
+        success: true,
+        gameId
+      })
     } catch (e) {
       socket.emit('create', {
         success: false,
@@ -136,12 +138,14 @@ io.on('connection', async function (socket) {
 
       socket.emit(
           'start',
-        {move: a,
+        {success: true,
+          move: a,
           grid: game.playerB.grid})
 
       io.of('/').connected[gameData.playerA.id].emit(
           'start',
-        {move: b,
+        {success: true,
+          move: b,
           grid: game.playerA.grid})
     }
   })
