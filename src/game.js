@@ -1,57 +1,65 @@
 const {generateEmptyGrid,
-       generateRandomGrid} = require('./helpers')
+       generateRandomGrid,
+       generateVesselsMap} = require('./helpers')
 
-
-function Player(socket, grid = generateRandomGrid()) {
-  this.socket = socket
-  this.primaryGrid = generateEmptyGrid()
-  this.trackingGrid = grid
+function Player(id, grid = generateRandomGrid()) {
+  this.id = id
+  this.grid = grid
+  this.vessels = generateVesselsMap(grid)
 }
 
 Player.prototype.isHit = function({x, y}) {
-  return this.trackingGrid[x][y]
-}
+  let data = {x, y}
+  if (this.trackingGrid[x][y]) {
+    let section = x * 10 + y
+    let vessel = this.vessels.get(section)
+    vessel.delete(section)
 
-Player.prototype.setHit = function({x, y, hit}) {
-  this.primaryGrid[x][y] = hit
-}
+    data.hit = true
+    if (!vessel.size) {
+      data.wreked = true
+      data.size   = vessel.size
+      this.vessels.delete(section)
 
-function Game({socketA, socketB, gridA, gridB}) {
-  this.setEvents(socketA)
-  this.setEvents(socketB)
-
-  this.playerA = new Player(socketA, gridA)
-  this.playerB = new Player(socketB, gridB)
-  this.whoseTurn = Math.floor(Math.random() * 2)
-      ? this.playerA
-      : this.playerB
-}
-
-Game.prototype.setEvents = function(socket) {
-  socket.on('turn', data => {
-    this.turn(socket, data)
-  })
-}
-
-Game.prototype.turn = function(socket, {x, y}) {
-  if (this.whoseTurn.socket !== socket) {
-    return socket.emit('turn', {error: 'It\'s not your turn!'})
+      // when only 'bySize' key left
+      if (this.vessel.size == 1) {
+        data.win = true
+      }
+    }
+  }
+  else {
+    data.hit = false
+    data.win = false
   }
 
-  let opponent = socket == this.playerA.socket
+  return data
+}
+
+function Game(playerA, playerB) {
+  this.playerA = playerA
+  this.playerB = playerB
+  this.whoseTurn = Math.floor(Math.random() * 2)
+      ? playerA.id
+      : playerB.id
+}
+
+Game.prototype.turn = function(playerId, {x, y}) {
+  if (this.whoseTurn !== playerId) {
+    return {error: 'It\'s not your turn!'}
+  }
+
+  let opponent = playerId == this.playerA.id
       ? this.playerB
       : this.playerA
   
-  let hit = opponent.isHit({x, y})
+  let data = opponent.isHit({x, y})
 
-  if (!hit) {
-    this.whoseTurn = opponent
+  if (!data.hit) {
+    this.whoseTurn = opponent.id
   }
 
-  socket.emit('turn', {x, y, hit})
-
-  opponent.setHit({x, y, hit})
-  opponent.socket.emit('hit', {x, y})
+  return data
 }
 
-module.exports = Game
+
+module.exports = {Game, Player}
