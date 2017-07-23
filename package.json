@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "description": "Yet another one sea battle",
   "main": "index.js",
+  "engines": {
+    "node": ">=8.0.0"
+  },
   "scripts": {
     "test": "mocha --timeout 10000 --recursive"
   },

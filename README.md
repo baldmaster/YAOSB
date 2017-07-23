@@ -4,7 +4,7 @@ Project is just for fun, Now it is backend part only, based on websockets (socke
 Not completed. There's something to do yet.
 
 ## To install:
-(assuming you have [node](http://nodejs.org/) and NPM installed)
+(assuming you have [node (>=8.0.0)](http://nodejs.org/) and NPM installed)
 
 `npm install`
 
