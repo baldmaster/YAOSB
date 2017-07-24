@@ -13,7 +13,7 @@ describe('Battleship test', () => {
     server = require('../server')
   })
 
-  after(() => setTimeout(() => server.close()))
+  after(() => setTimeout(() => server.close(), 2000))
 
   it('Server should exist', done => {
     server.should.exist
@@ -273,5 +273,14 @@ describe('Battleship test', () => {
     })
 
     opponent.emit('turn', {gameId, x, y})
+  })
+  it('Opponent should get error on player disconnect', done => {
+    opponent.on('game error', data => {
+      data.should.exist
+      data.should.have.properties(['code', 'message'])
+      done()
+    })
+
+    player.disconnect()
   })
 })

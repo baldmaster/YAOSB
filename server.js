@@ -11,13 +11,50 @@ let db = new Database({filename: './db/games', autoload: true})
 const DB_ERROR = 'DB_ERROR'
 const INPUT_ERROR = 'INPUT_ERROR'
 const JOIN_ERROR = 'JOIN_ERROR'
+const OPPONENT_DISCONNECTED = 'OPPONENT_DISCONNECTED'
 
 async function getAvailableGames () {
   return db.find({started: false}, {'playerA.grid': 0})
 }
 
 io.on('connection', async function (socket) {
-  socket.on('disconnect', function () {
+  socket.on('disconnect', async function () {
+    let playerId = socket.id
+
+    let gameData = await db.findOne({
+      started: true,
+      $or: [
+        {
+          'playerA.id': playerId
+        },
+        {
+          'playerB.id': playerId
+        }
+      ]
+    }, {
+      'playerA.grid': 0,
+      'playerB.grid': 0
+    })
+
+    if (!gameData) { // Nothing to do
+      return
+    }
+
+    let opponentId = gameData.playerA.id === socket.id
+        ? gameData.playerB.id
+        : gameData.playerA.id
+
+    io.of('/').connected[opponentId].emit('game error', {
+      code: OPPONENT_DISCONNECTED,
+      message: 'Opponent disconnected, cannot continue.'
+    })
+
+    try {
+      await db.remove({_id: gameData._id})
+      Games.delete(gameData._id)
+    } catch (e) {
+      // do something
+    }
   })
 
   socket.on('create', async function (grid, userName) {
