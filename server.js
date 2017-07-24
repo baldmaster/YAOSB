@@ -1,88 +1,171 @@
 const uuid = require('uuid')
 const {validateGrid} = require('./src/helpers')
-const Game = require('./src/game')
+const Database = require('nedb-promise')
+const {Game, Player} = require('./src/game')
 
-let games = new Map()
-
-let userGameMap = new Map()
+let Games = new Map()
 
 let io = require('socket.io')(8080)
+let db = new Database({filename: './db/games', autoload: true})
 
-io.on('connection', function (socket) {
-  socket.emit('welcome', 'Welcome to seabattle game!')
+const DB_ERROR = 'DB_ERROR'
+const INPUT_ERROR = 'INPUT_ERROR'
+const JOIN_ERROR = 'JOIN_ERROR'
 
-  socket.emit('games available', Array.from(games.keys()))
-  
+async function getAvailableGames () {
+  return db.find({started: false}, {'playerA.grid': 0})
+}
+
+io.on('connection', async function (socket) {
   socket.on('disconnect', function () {
-    let gameId = userGameMap.get(socket)
-    if (gameId) {
-      let gameData = games.get(gameId)
-
-      if (gameData) {
-        let sock = socket == gameData.socketA
-            ? gameData.socketB
-            : gameData.socketA
-
-        if (sock) {
-          sock.emit('info', 'Opponent disconnected!')
-          userGameMap.delete(sock)
-        }
-        games.delete(gameId)
-        userGameMap.delete(socket)
-      }
-    }
   })
 
-  socket.on('create', function(grid) {
+  socket.on('create', async function (grid, userName) {
+    if (grid && !validateGrid(grid)) {
+      socket.emit('create', {
+        success: false,
+        error: {
+          code: INPUT_ERROR,
+          message: 'Grid is not valid'
+        }
+      })
+
+      return
+    }
+
     let gameId = uuid.v4()
 
-    userGameMap.set(socket, gameId)
+    let gameObject = {
+      _id: gameId,
+      playerA: {
+        id: socket.id,
+        grid,
+        userName
+      },
+      started: false,
+      createdAt: Date.now()
+    }
 
-    games.set(gameId, {socketA: socket, gridA: grid})
-    
-    socket.emit('create', {gameId})
+    try {
+      await db.insert(gameObject)
+
+      socket.emit('create', {
+        success: true,
+        gameId
+      })
+    } catch (e) {
+      socket.emit('create', {
+        success: false,
+        error: {
+          code: DB_ERROR,
+          message: e.message
+        }
+      })
+    }
   })
 
-  socket.on('join', function(data) {
+  socket.on('join', async function (data) {
     if (!data || !data.gameId) {
-      socket.emit('join', {error: 'gameId not specified'})
+      socket.emit('join', {
+        success: false,
+        error: {
+          code: INPUT_ERROR,
+          message: 'gameId not specified'
+        }
+      })
 
       return
     }
 
-    if (!games.has(data.gameId)) {
-      socket.emit('join', {error: 'Wrong game id'})
+    let gameData = await db.findOne({_id: data.gameId})
+
+    if (!gameData) {
+      socket.emit('join', {
+        success: false,
+        error: {
+          code: INPUT_ERROR,
+          message: 'Wrong game id'
+        }
+      })
+
       return
     }
 
-    let gameData = games.get(data.gameId)
+    if (gameData.started) {
+      socket.emit('join', {
+        success: false,
+        error: {
+          code: JOIN_ERROR,
+          message: 'Cannot join, game in progress'
+        }
+      })
+    } else {
+      try {
+        await db.update({_id: data.gameId}, {
+          $set: {
+            playerB: {
+              id: socket.id,
+              userName: data.userName,
+              grid: data.grid
+            },
+            started: true
+          }
+        })
+      } catch (e) {
+        socket.emit('join', {
+          success: false,
+          error: {
+            code: DB_ERROR,
+            message: e.message
+          }
+        })
+      }
 
-    if (gameData.socketB) {
-      socket.emit('join', {error: 'Cannot join, game in progress'})
-    }
-    else {
-      userGameMap.set(socket, data.gameId)
-      games.set(data.gameId, Object.assign(gameData, {socketB: socket,
-                                                      gridB: data.grid}))
+      let game = new Game(new Player(gameData.playerA.id,
+                                     gameData.playerA.grid),
+                          new Player(socket.id,
+                                     data.grid))
 
-      gameData.game = new Game(gameData)
+      Games.set(data.gameId, game)
 
-      socket.emit('join', {success: true,
-                           info: 'You successfully joined the game'})
+      socket.emit('join', {
+        success: true,
+        info: 'You successfully joined the game'
+      })
 
-      let [a, b] = gameData.game.whoseTurn.socket === socket
+      let [a, b] = game.whoseTurn === socket.id
           ? [true, false]
           : [false, true]
 
-      socket.emit('start',
-                  {move: a,
-                   grid: gameData.game.playerB.trackingGrid})
+      socket.emit('start', {
+        success: true,
+        move: a,
+        grid: game.playerB.grid
+      })
 
-      gameData.socketA.emit('start',
-                            {move: b,
-                             grid: gameData.game.playerA.trackingGrid})
+      io.of('/').connected[gameData.playerA.id].emit('start', {
+        success: true,
+        move: b,
+        grid: game.playerA.grid
+      })
     }
   })
+
+  socket.on('turn', function (data) {
+    let game = Games.get(data.gameId)
+
+    if (!game) {
+      socket.emit('turn', {error: 'Game not exists'})
+    }
+
+    let resp = game.turn(socket.id, data)
+
+    resp.success = true
+    socket.emit('turn', resp)
+  })
+
+  socket.emit('welcome', 'Welcome to seabattle game!')
+  socket.emit('games available', await getAvailableGames())
 })
 
 module.exports = io
