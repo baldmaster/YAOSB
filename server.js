@@ -13,7 +13,7 @@ const INPUT_ERROR = 'INPUT_ERROR'
 const JOIN_ERROR = 'JOIN_ERROR'
 
 async function getAvailableGames () {
-  return db.find({started: true}, {'playerA.grid': 0})
+  return db.find({started: false}, {'playerA.grid': 0})
 }
 
 io.on('connection', async function (socket) {
@@ -42,6 +42,7 @@ io.on('connection', async function (socket) {
         grid,
         userName
       },
+      started: false,
       createdAt: Date.now()
     }
 
@@ -136,17 +137,17 @@ io.on('connection', async function (socket) {
           ? [true, false]
           : [false, true]
 
-      socket.emit(
-          'start',
-        {success: true,
-          move: a,
-          grid: game.playerB.grid})
+      socket.emit('start', {
+        success: true,
+        move: a,
+        grid: game.playerB.grid
+      })
 
-      io.of('/').connected[gameData.playerA.id].emit(
-          'start',
-        {success: true,
-          move: b,
-          grid: game.playerA.grid})
+      io.of('/').connected[gameData.playerA.id].emit('start', {
+        success: true,
+        move: b,
+        grid: game.playerA.grid
+      })
     }
   })
 
@@ -159,6 +160,7 @@ io.on('connection', async function (socket) {
 
     let resp = game.turn(socket.id, data)
 
+    resp.success = true
     socket.emit('turn', resp)
   })
 
