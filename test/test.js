@@ -1,6 +1,6 @@
 const should = require('should')
 const { execFile } = require('child_process')
-
+const WebSocket = require('ws')
 let server
 
 let gameId
@@ -21,62 +21,70 @@ describe('Battleship test', () => {
     done()
   })
 
-  it('Client should connect to server and get welcome response', done => {
-    let client = require('socket.io-client')(`http://localhost:8080`)
-
-    client.on('welcome', function (data) {
-      data.should.be.equal('Welcome to seabattle game!')
-
-      done()
-    })
-  })
 
   it('Client should successfully create new game', done => {
-    let client = require('socket.io-client')(`http://localhost:8080`)
+    let client = new WebSocket(`http://localhost:8080`)
 
-    client.on('create', function (data) {
-      data.should.have.property('gameId')
-      data.gameId.length.should.be.equal(36)
-      gameId = data.gameId
-      clientA = client
-      done()
+    client.on('message', function (data) {
+      data.should.exist
+      let params = JSON.parse(data)
+      if (params.method === 'create') {
+        params.should.have.property('gameId')
+        params.gameId.length.should.be.equal(36)
+        gameId = params.gameId
+        clientA = client
+        done()
+      }
     })
 
-    client.emit('create')
+    client.on('open', function() {
+      client.send(JSON.stringify({method: 'create'}))
+    })
   })
 
   it('Client should successfully join game', done => {
-    let client = require('socket.io-client')(`http://localhost:8080`)
+    let client = new WebSocket(`http://localhost:8080`)
 
-    client.on('games available', games => {
-      client.emit('join', {gameId})
-    })
+    clientA.removeEventListener('message')
 
-    clientA.on('start', data => {
+    clientA.on('message', function (data) {
       data.should.exist
-      data.grid.length.should.be.equal(10)
+      let params = JSON.parse(data)
 
-      data.grid.forEach(row => {
-        row.length.should.be.equal(10)
-      })
-      clientAData = data
+      if (params.method === 'start') {
+        params.grid.length.should.be.equal(10)
+
+        params.grid.forEach(row => {
+          row.length.should.be.equal(10)
+        })
+        clientAData = params
+      }
     })
 
-    client.on('join', function (data) {
-      data.should.have.properties(['info'])
-      clientB = client
+    client.on('message', data => {
+      let params = JSON.parse(data)
+      if (params.method === 'games available') {
+        client.send(JSON.stringify({
+          method: 'join',
+          gameId
+        }))
+      } else if (params.method === 'join') {
+        clientB = client
+      } else if (params.method === 'start') {
+
+        params.grid.length.should.be.equal(10)
+
+        params.grid.forEach(row => {
+          row.length.should.be.equal(10)
+        })
+
+        clientBData = params
+        done()
+      }
     })
 
-    client.on('start', data => {
-      data.should.exist
-      data.grid.length.should.be.equal(10)
-
-      data.grid.forEach(row => {
-        row.length.should.be.equal(10)
-      })
-
-      clientBData = data
-      done()
+    client.on('open', function() {
+      client.send(JSON.stringify({method: 'join', gameId}))
     })
   })
 
@@ -85,14 +93,18 @@ describe('Battleship test', () => {
         ? clientB
         : clientA
 
-    client.on('turn', data => {
+    client.removeEventListener('message')
+
+    client.on('message', data => {
       data.should.exist
-      data.should.have.property('error')
+
+      let params = JSON.parse(data)
+      params.should.have.property('error')
 
       done()
     })
 
-    client.emit('turn', {gameId, x: 0, y: 5})
+    client.send(JSON.stringify({method: 'turn', gameId, x: 0, y: 5}))
   })
 
   let player
@@ -116,23 +128,33 @@ describe('Battleship test', () => {
       }
     }
 
-    player.removeListener('turn')
+    player.removeEventListener('message')
 
-    player.on('turn', data => {
+    player.on('message', data => {
       data.should.exist
-      data.should.have.properties([
-        'x', 'y', 'hit'
-      ])
 
-      data.hit.should.be.equal(false)
-      done()
+      let params = JSON.parse(data)
+
+      if (params.method === 'turn') {
+        params.should.have.properties([
+          'x', 'y', 'hit'
+        ])
+
+        params.hit.should.be.equal(false)
+        done()
+      }
     })
 
-    player.emit('turn', {gameId, x, y})
+    player.send(JSON.stringify({
+      method: 'turn',
+      gameId,
+      x,
+      y
+    }))
   })
 
   it('Opponent should successfully make a turn and miss', done => {
-    opponent.removeListener('turn')
+    opponent.removeEventListener('message')
 
     let x = 0
     let y
@@ -144,21 +166,31 @@ describe('Battleship test', () => {
       }
     }
 
-    opponent.on('turn', data => {
+    opponent.on('message', data => {
       data.should.exist
-      data.should.have.properties([
-        'x', 'y', 'hit'
-      ])
+      let params = JSON.parse(data)
 
-      data.hit.should.be.equal(false)
-      done()
+      if (params.method === 'turn') {
+        params.should.have.properties([
+          'x', 'y', 'hit'
+        ])
+
+        params.hit.should.be.equal(false)
+        done()
+      }
+
     })
 
-    opponent.emit('turn', {gameId, x, y})
+    opponent.send(JSON.stringify({
+      method: 'turn',
+      gameId,
+      x,
+      y
+    }))
   })
 
   it('Player should successfully make a turn and hit', done => {
-    player.removeListener('turn')
+    player.removeEventListener('message')
 
     let x
     let y
@@ -177,21 +209,32 @@ describe('Battleship test', () => {
       }
     }
 
-    player.on('turn', data => {
+    player.on('message', data => {
       data.should.exist
-      data.should.have.properties([
-        'x', 'y', 'hit'
-      ])
 
-      data.hit.should.be.true
-      done()
+      let params = JSON.parse(data)
+
+      if (params.method === 'turn') {
+        params.should.have.properties([
+          'x', 'y', 'hit'
+        ])
+
+        params.hit.should.be.true
+        done()
+      }
+
     })
 
-    player.emit('turn', {gameId, x, y})
+    player.send(JSON.stringify({
+      method: 'turn',
+      gameId,
+      x,
+      y
+    }))
   })
 
   it('Player should successfully make another turn after hit', done => {
-    player.removeListener('turn')
+    player.removeEventListener('message')
 
     let x = 0
     let y
@@ -203,21 +246,33 @@ describe('Battleship test', () => {
       }
     }
 
-    player.on('turn', data => {
+    player.on('message', data => {
       data.should.exist
-      data.should.have.properties([
-        'x', 'y', 'hit'
-      ])
 
-      data.hit.should.be.equal(false)
-      done()
+      let params = JSON.parse(data)
+
+      if (params.method === 'turn') {
+        params.should.have.properties([
+          'x', 'y', 'hit'
+        ])
+
+        params.hit.should.be.false()
+        done()
+      }
+
     })
 
-    player.emit('turn', {gameId, x, y})
+    player.send(JSON.stringify({
+      method: 'turn',
+      gameId,
+      x,
+      y
+    }))
+
   })
 
   it('Opponent should successfully make a turn and hit', done => {
-    opponent.removeListener('turn')
+    opponent.removeEventListener('message')
 
     let x
     let y
@@ -236,21 +291,33 @@ describe('Battleship test', () => {
       }
     }
 
-    opponent.on('turn', data => {
+    opponent.on('message', data => {
       data.should.exist
-      data.should.have.properties([
-        'x', 'y', 'hit'
-      ])
 
-      data.hit.should.be.equal(true)
-      done()
+      let params = JSON.parse(data)
+
+      if (params.method === 'turn') {
+        params.should.have.properties([
+          'x', 'y', 'hit'
+        ])
+
+        params.hit.should.be.true()
+        done()
+      }
+
     })
 
-    opponent.emit('turn', {gameId, x, y})
+    opponent.send(JSON.stringify({
+      method: 'turn',
+      gameId,
+      x,
+      y
+    }))
+
   })
 
   it('Opponent should successfully make another turn after hit', done => {
-    opponent.removeListener('turn')
+    opponent.removeEventListener('message')
 
     let x = 0
     let y
@@ -262,25 +329,47 @@ describe('Battleship test', () => {
       }
     }
 
-    opponent.on('turn', data => {
+    opponent.on('message', data => {
       data.should.exist
-      data.should.have.properties([
-        'x', 'y', 'hit'
-      ])
 
-      data.hit.should.be.equal(false)
-      done()
+      let params = JSON.parse(data)
+
+      if (params.method === 'turn') {
+        params.should.have.properties([
+          'x', 'y', 'hit'
+        ])
+
+        params.hit.should.be.false()
+        done()
+      }
+
     })
 
-    opponent.emit('turn', {gameId, x, y})
+    opponent.send(JSON.stringify({
+      method: 'turn',
+      gameId,
+      x,
+      y
+    }))
+
   })
   it('Opponent should get error on player disconnect', done => {
-    opponent.on('game error', data => {
+    opponent.removeEventListener('message')
+
+    opponent.on('message', data => {
       data.should.exist
-      data.should.have.properties(['code', 'message'])
-      done()
+
+      let params = JSON.parse(data)
+
+      if (params.method === 'game error') {
+        params.should.have.property('error')
+
+        done()
+      }
+
     })
 
-    player.disconnect()
+
+    player.close()
   })
 })

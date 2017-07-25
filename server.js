@@ -5,8 +5,10 @@ const {Game, Player} = require('./src/game')
 
 let Games = new Map()
 
-let io = require('socket.io')(8080)
 let db = new Database({filename: './db/games', autoload: true})
+
+const WebSocket = require('ws')
+const wss = new WebSocket.Server({ port: 8080 })
 
 const DB_ERROR = 'DB_ERROR'
 const INPUT_ERROR = 'INPUT_ERROR'
@@ -17,8 +19,177 @@ async function getAvailableGames () {
   return db.find({started: false}, {'playerA.grid': 0})
 }
 
-io.on('connection', async function (socket) {
-  socket.on('disconnect', async function () {
+async function createHandler (socket, {grid, userName}) {
+  if (grid && !validateGrid(grid)) {
+    return {
+      method: 'create',
+      success: false,
+      error: {
+        code: INPUT_ERROR,
+        message: 'Grid is not valid'
+      }
+    }
+  }
+
+  let gameId = uuid.v4()
+
+  let gameObject = {
+    _id: gameId,
+    playerA: {
+      id: socket.id,
+      grid,
+      userName
+    },
+    started: false,
+    createdAt: Date.now()
+  }
+
+  try {
+    await db.insert(gameObject)
+
+    return {
+      method: 'create',
+      success: true,
+      gameId
+    }
+  } catch (e) {
+    return {
+      method: 'create',
+      success: false,
+      error: {
+        code: DB_ERROR,
+        message: e.message
+      }
+    }
+  }
+}
+
+async function joinHandler (socket, data) {
+  if (!data || !data.gameId) {
+    socket.send(JSON.stringify({
+      method: 'join',
+      success: false,
+      error: {
+        code: INPUT_ERROR,
+        message: 'gameId not specified'
+      }
+    }))
+
+    return
+  }
+
+  let gameData = await db.findOne({_id: data.gameId})
+
+  let response
+  if (!gameData) {
+    response = {
+      method: 'join',
+      success: false,
+      error: {
+        code: INPUT_ERROR,
+        message: 'Wrong game id'
+      }
+    }
+  }
+
+  if (gameData.started) {
+    response = {
+      method: 'join',
+      success: false,
+      error: {
+        code: JOIN_ERROR,
+        message: 'Cannot join, game in progress'
+      }
+    }
+  } else {
+    try {
+      await db.update({_id: data.gameId}, {
+        $set: {
+          playerB: {
+            id: socket.id,
+            userName: data.userName,
+            grid: data.grid
+          },
+          started: true
+        }
+      })
+    } catch (e) {
+      response = {
+        success: false,
+        error: {
+          code: DB_ERROR,
+          message: e.message
+        }
+      }
+    }
+  }
+
+  if (!response) {
+    let game = new Game(new Player(gameData.playerA.id,
+                                   gameData.playerA.grid),
+                        new Player(socket.id,
+                                   data.grid))
+
+    Games.set(data.gameId, game)
+
+    socket.send(JSON.stringify({
+      method: 'join',
+      success: true,
+      info: 'You successfully joined the game'
+    }))
+
+    let [a, b] = game.whoseTurn === socket.id
+        ? [true, false]
+        : [false, true]
+
+    socket.send(JSON.stringify({
+      method: 'start',
+      move: a,
+      grid: game.playerB.grid
+    }))
+
+    for (let client of wss.clients) {
+      if (client.id === game.playerA.id) {
+        client.send(JSON.stringify({
+          method: 'start',
+          move: b,
+          grid: game.playerA.grid
+        }))
+        break
+      }
+    }
+  } else {
+    socket.send(JSON.stringify(response))
+  }
+}
+
+async function turnHandler (socket, data) {
+  let game = Games.get(data.gameId)
+
+  if (!game) {
+    return {
+      method: 'turn',
+      success: false,
+      error: {
+        code: INPUT_ERROR,
+        message: 'Game not exists'
+      }
+    }
+  }
+
+  let resp = game.turn(socket.id, data)
+
+  resp.success = true
+  resp.method = 'turn'
+
+  return resp
+}
+
+wss.on('connection', async function (socket) {
+  // assign unique id
+  socket.id = uuid.v4()
+
+  socket.on('close', async function () {
     let playerId = socket.id
 
     let gameData = await db.findOne({
@@ -44,10 +215,18 @@ io.on('connection', async function (socket) {
         ? gameData.playerB.id
         : gameData.playerA.id
 
-    io.of('/').connected[opponentId].emit('game error', {
-      code: OPPONENT_DISCONNECTED,
-      message: 'Opponent disconnected, cannot continue.'
-    })
+    for (let client of wss.clients) {
+      if (client.id === opponentId) {
+        client.send(JSON.stringify({
+          method: 'game error',
+          error: {
+            code: OPPONENT_DISCONNECTED,
+            message: 'Opponent disconnected, cannot continue.'
+          }
+        }))
+        break
+      }
+    }
 
     try {
       await db.remove({_id: gameData._id})
@@ -57,152 +236,54 @@ io.on('connection', async function (socket) {
     }
   })
 
-  socket.on('create', async function (grid, userName) {
-    if (grid && !validateGrid(grid)) {
-      socket.emit('create', {
-        success: false,
-        error: {
-          code: INPUT_ERROR,
-          message: 'Grid is not valid'
-        }
-      })
-
-      return
-    }
-
-    let gameId = uuid.v4()
-
-    let gameObject = {
-      _id: gameId,
-      playerA: {
-        id: socket.id,
-        grid,
-        userName
-      },
-      started: false,
-      createdAt: Date.now()
-    }
+  socket.on('message', async function (data) {
+    let params
 
     try {
-      await db.insert(gameObject)
-
-      socket.emit('create', {
-        success: true,
-        gameId
-      })
+      params = JSON.parse(data)
     } catch (e) {
-      socket.emit('create', {
-        success: false,
-        error: {
-          code: DB_ERROR,
-          message: e.message
-        }
-      })
-    }
-  })
-
-  socket.on('join', async function (data) {
-    if (!data || !data.gameId) {
-      socket.emit('join', {
-        success: false,
+      socket.send(JSON.stringify({
         error: {
           code: INPUT_ERROR,
-          message: 'gameId not specified'
+          message: 'Invalid JSON'
         }
-      })
+      }))
 
       return
     }
 
-    let gameData = await db.findOne({_id: data.gameId})
+    let response
 
-    if (!gameData) {
-      socket.emit('join', {
-        success: false,
-        error: {
-          code: INPUT_ERROR,
-          message: 'Wrong game id'
-        }
-      })
+    switch (params.method) {
+      case 'create':
+        response = await createHandler(socket, params)
+        socket.send(JSON.stringify(response))
+        break
+      case 'join':
+        await joinHandler(socket, params)
+        break
+      case 'turn':
+        response = await turnHandler(socket, params)
+        socket.send(JSON.stringify(response))
 
-      return
-    }
-
-    if (gameData.started) {
-      socket.emit('join', {
-        success: false,
-        error: {
-          code: JOIN_ERROR,
-          message: 'Cannot join, game in progress'
-        }
-      })
-    } else {
-      try {
-        await db.update({_id: data.gameId}, {
-          $set: {
-            playerB: {
-              id: socket.id,
-              userName: data.userName,
-              grid: data.grid
-            },
-            started: true
-          }
-        })
-      } catch (e) {
-        socket.emit('join', {
+        break
+      default:
+        response = {
+          method: params.method,
           success: false,
           error: {
-            code: DB_ERROR,
-            message: e.message
+            code: INPUT_ERROR,
+            message: 'Wrong method'
           }
-        })
-      }
-
-      let game = new Game(new Player(gameData.playerA.id,
-                                     gameData.playerA.grid),
-                          new Player(socket.id,
-                                     data.grid))
-
-      Games.set(data.gameId, game)
-
-      socket.emit('join', {
-        success: true,
-        info: 'You successfully joined the game'
-      })
-
-      let [a, b] = game.whoseTurn === socket.id
-          ? [true, false]
-          : [false, true]
-
-      socket.emit('start', {
-        success: true,
-        move: a,
-        grid: game.playerB.grid
-      })
-
-      io.of('/').connected[gameData.playerA.id].emit('start', {
-        success: true,
-        move: b,
-        grid: game.playerA.grid
-      })
+        }
+        socket.send(JSON.stringify(response))
     }
   })
 
-  socket.on('turn', function (data) {
-    let game = Games.get(data.gameId)
-
-    if (!game) {
-      socket.emit('turn', {error: 'Game not exists'})
-    }
-
-    let resp = game.turn(socket.id, data)
-
-    resp.success = true
-    socket.emit('turn', resp)
-  })
-
-  socket.emit('welcome', 'Welcome to seabattle game!')
-  socket.emit('games available', await getAvailableGames())
+  socket.send(JSON.stringify({
+    method: 'available games',
+    games: await getAvailableGames()
+  }))
 })
 
-module.exports = io
+module.exports = wss

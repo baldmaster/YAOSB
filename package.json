@@ -14,13 +14,11 @@
   "devDependencies": {
     "mocha": "^3.4.2",
     "should": "^11.2.1",
-    "socket.io-client": "^2.0.3"
   },
   "dependencies": {
-    "express": "^4.15.3",
     "nedb": "^1.8.0",
     "nedb-promise": "^2.0.1",
-    "socket.io": "^2.0.3",
-    "uuid": "^3.1.0"
+    "uuid": "^3.1.0",
+    "ws": "^3.0.0"
   }
 }
