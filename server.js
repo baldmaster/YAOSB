@@ -8,7 +8,7 @@ let Games = new Map()
 let db = new Database({filename: './db/games', autoload: true})
 
 const WebSocket = require('ws')
-const wss = new WebSocket.Server({ port: 8080 })
+const wss = new WebSocket.Server({ port: 9001 })
 
 const DB_ERROR = 'DB_ERROR'
 const INPUT_ERROR = 'INPUT_ERROR'
