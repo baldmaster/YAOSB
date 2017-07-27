@@ -1,10 +1,10 @@
 const {generateRandomGrid,
        generateVesselsMap} = require('./helpers')
 
-function Player (id, grid = generateRandomGrid()) {
+function Player (id, grid) {
   this.id = id
-  this.grid = grid
-  this.vessels = generateVesselsMap(grid)
+  this.grid = grid || generateRandomGrid()
+  this.vessels = generateVesselsMap(this.grid)
 }
 
 Player.prototype.isHit = function ({x, y}) {

@@ -24,6 +24,8 @@ wss =
   "ws://localhost:9001"
 
 
+-- TYPES
+
 
 -- MODEL
 
@@ -32,29 +34,35 @@ type alias Model =
   { gameId : String
   , playerGrid : Matrix Int
   , opponentGrid : Matrix Int
-  }
+  , availableGames: List AvailableGame }
 
+emptyGrid : Matrix Int
+emptyGrid = square 10 (\_ -> 0)
 
 init : (Model, Cmd Msg)
 init =
-    (Model "" (square 10 (\_ -> 0)) (square 10 (\_ -> 0)), Cmd.none)
+    (Model "" emptyGrid emptyGrid [], Cmd.none)
 
 
 -- UPDATE
 
-
 type Msg
     = CreateGame (Maybe (Matrix Int))
-    | JoinGame (Maybe (Matrix Int))
+    | JoinGame String (Maybe (Matrix Int))
     | NewTurn Location
     | NewMessage String
 
+type alias AvailableGame = {id : String, createdAt : Int}
 
-type alias JoinData = {info : String}
+type alias JoinData = { gameId : String
+                      , grid : Matrix Int
+                      , myTurn: Bool
+                      , info : String}
 type alias ErrorData = {method : String
                        ,code : String
                        ,message : String}
-type alias StartData = {move : Bool, grid : Matrix Int}
+type alias StartData = {myTurn : Bool,
+                        grid : Matrix Int}
 type alias TurnData  =  {x : Int
                         ,y : Int
                         ,hit : Bool
@@ -67,13 +75,26 @@ type GameData
     | Join  JoinData
     | Start StartData
     | Turn TurnData
+    | AvGames (List AvailableGame)
     | GameError ErrorData
 
 createDecoder : JD.Decoder GameData
 createDecoder = JD.map Create (field "gameId" JD.string)
 
+availableGameDecoder : JD.Decoder AvailableGame
+availableGameDecoder = JD.map2 AvailableGame
+                       (field "_id" JD.string)
+                       (field "createdAt" JD.int)
+
+avGamesDecoder : JD.Decoder GameData
+avGamesDecoder = JD.map AvGames
+                 (field "games" (JD.list availableGameDecoder))
+
 joinDecoder : JD.Decoder GameData
-joinDecoder = JD.map JoinData
+joinDecoder = JD.map4 JoinData
+              (field "gameId" JD.string)
+              (field "grid" matrixDecoder)
+              (field "myTurn" JD.bool)
               (field "info" JD.string)
                   |> JD.map Join
 
@@ -103,7 +124,7 @@ turnDecoder = JD.map6 TurnData
 
 startDecoder : JD.Decoder GameData
 startDecoder = JD.map2 StartData
-               (field "move" JD.bool)
+               (field "myTurn" JD.bool)
                (field "grid" matrixDecoder)
                    |> JD.map Start
 
@@ -113,6 +134,7 @@ getDecoder method = case method of
                            "join" -> joinDecoder
                            "turn" -> turnDecoder
                            "start" -> startDecoder
+                           "available games" -> Debug.log method avGamesDecoder
                            _       -> unknownMethodDecoder
 
 matrixDecoder : JD.Decoder (Matrix Int)
@@ -141,11 +163,11 @@ update msg model =
                                         _ ->  JE.null)
                           ]
         in (model, WebSocket.send wss message)
-    JoinGame grid ->
+    JoinGame gameId grid ->
         let message = encode 0
                       <| JE.object [
                            ("method", JE.string "join")
-                          ,("gameId", JE.string model.gameId)
+                          ,("gameId", JE.string gameId)
                           ,("grid",   case grid of
                                           Just g -> matrixToJson g
                                           _ ->   JE.null)
@@ -170,13 +192,17 @@ update msg model =
                 in case data of
                        Ok gameData ->
                            case gameData of
-                               Create id ->  ({model | gameId = id}, Cmd.none)
-                               Join  data ->  (model, Cmd.none) -- TODO
+                               Create id ->   ({model | gameId = id}, Cmd.none)
+                               Join  data ->  ({model | gameId = data.gameId, playerGrid = data.grid}, Cmd.none)
                                Start data ->  ({model | playerGrid = data.grid}, Cmd.none)
-                               Turn  data -> (model, Cmd.none) -- TODO
+                               Turn  data ->
+                                   let val = if data.hit == True then 1 else 2
+                                       oppGrid = Matrix.set (Matrix.loc data.x data.y) val model.opponentGrid
+                                   in ({model | opponentGrid = oppGrid}, Cmd.none)
+                               AvGames games -> ({model | availableGames = games}, Cmd.none)
                                GameError e -> (model, Cmd.none) -- TODO
-                       Err e ->  (model, Cmd.none)
-            Err e ->  (model, Cmd.none)
+                       Err e -> Debug.log e (model, Cmd.none)
+            Err e -> Debug.log e (model, Cmd.none)
 
 
 -- SUBSCRIPTIONS
@@ -187,25 +213,49 @@ subscriptions model =
   WebSocket.listen wss NewMessage
 
 
-
 -- VIEW
-locationToDiv : Matrix.Location -> a -> Html Msg
+locationToDiv : Matrix.Location -> Int -> Html Msg
 locationToDiv location element =
-    div [class "cell"] []
+    div [class "cell"
+        , if element == 1 then
+              class "occupied-cell"
+          else class "empty-cell"]
+    []
 
-opponentLocationToDiv : Matrix.Location -> a -> Html Msg
+opponentLocationToDiv : Matrix.Location -> Int -> Html Msg
 opponentLocationToDiv location element =
-    div [class "cell", onClick <| NewTurn location] []
+    div [class "cell"
+        , case element of
+              1 -> class "hit-cell"
+              2 -> class "missed-cell"
+              _ -> class "empty-cell"
+        , onClick <| NewTurn location]
+    []
+
+availableGames : List AvailableGame -> Html Msg
+availableGames = div [class "games"]
+                 << List.map (\g ->
+                                  div [class "av-game"]
+                                  [
+                                   button [onClick <| JoinGame g.id Nothing]
+                                       [text "join game"]
+                                  ])
 
 view : Model -> Html Msg
 view model =
-  div [] [
-       div [class "gridBox"]
-           <| List.map(\row -> div [class "row"] row)
-           <| Matrix.toList
-           <| Matrix.mapWithLocation locationToDiv model.playerGrid
-      ,div [class "gridBox"]
-           <| List.map(\row -> div [class "row"] row)
-           <| Matrix.toList
-           <| Matrix.mapWithLocation opponentLocationToDiv model.opponentGrid
-      ]
+    if model.gameId == "" then
+        div [] [
+             button [onClick <| CreateGame Nothing] [text "new game"]
+            ,availableGames model.availableGames
+            ]
+    else
+        div [] [
+             div [class "gridBox"]
+                 <| List.map(\row -> div [class "row"] row)
+                 <| Matrix.toList
+                 <| Matrix.mapWithLocation locationToDiv model.playerGrid
+            ,div [class "gridBox"]
+                 <| List.map(\row -> div [class "row"] row)
+                 <| Matrix.toList
+                 <| Matrix.mapWithLocation opponentLocationToDiv model.opponentGrid
+            ]

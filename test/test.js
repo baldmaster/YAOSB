@@ -23,7 +23,7 @@ describe('Battleship test', () => {
 
 
   it('Client should successfully create new game', done => {
-    let client = new WebSocket(`http://localhost:8080`)
+    let client = new WebSocket(`http://localhost:9001`)
 
     client.on('message', function (data) {
       data.should.exist
@@ -43,7 +43,7 @@ describe('Battleship test', () => {
   })
 
   it('Client should successfully join game', done => {
-    let client = new WebSocket(`http://localhost:8080`)
+    let client = new WebSocket(`http://localhost:9001`)
 
     clientA.removeEventListener('message')
 
@@ -70,7 +70,6 @@ describe('Battleship test', () => {
         }))
       } else if (params.method === 'join') {
         clientB = client
-      } else if (params.method === 'start') {
 
         params.grid.length.should.be.equal(10)
 
