@@ -236,7 +236,10 @@ update msg model =
                                            set (loc data.x data.y)
                                                val
                                                model.playerGrid
-                                   in ({model | playerGrid = g}, Cmd.none)
+                                   in ({model | playerGrid = g
+                                       , gameStatus = case data.win of
+                                                          Just True ->  Lose
+                                                          _ ->  model.gameStatus}, Cmd.none)
                                Turn  data ->
                                    let val =
                                            if data.hit == True then 1 else 2
@@ -244,7 +247,10 @@ update msg model =
                                            set (loc data.x data.y)
                                                val
                                                model.opponentGrid
-                                   in ({model | opponentGrid = g}, Cmd.none)
+                                   in ({model | opponentGrid = g
+                                       , gameStatus = case data.win of
+                                                          Just True -> Win
+                                                          _ ->  model.gameStatus}, Cmd.none)
                                AvGames games ->
                                    ({model | availableGames = games}, Cmd.none)
                                GameError e -> (model, Cmd.none) -- TODO
