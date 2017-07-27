@@ -54,6 +54,7 @@ type Msg
     | NewTurn Location
     | NewMessage String
     | CancelNewGame
+    | PlayAgain
 
 type alias AvailableGame = {id : String, createdAt : Int}
 
@@ -74,7 +75,11 @@ type alias TurnData  =  {x : Int
                         ,win : Maybe Bool}
 
 
-type GameStatus = Undefined | New | Joined
+type GameStatus = Undefined
+                | New
+                | Joined
+                | Win
+                | Lose
 
 type GameData
     = Create String
@@ -161,6 +166,8 @@ update : Msg -> Model -> (Model, Cmd Msg)
 update msg model =
   case msg of
     CancelNewGame ->
+        ({model | gameStatus = Undefined}, Cmd.none) -- TODO: delete new game on server
+    PlayAgain ->
         ({model | gameStatus = Undefined}, Cmd.none)
     CreateGame grid ->
         let message = encode 0
@@ -291,4 +298,13 @@ view model =
                      <| Matrix.toList
                      <| Matrix.mapWithLocation
                      opponentLocationToDiv model.opponentGrid
+                ]
+        _ ->
+            div [] [
+                 span [] [text "Game over"]
+                ,span [] [text <| if model.gameStatus == Win then
+                                      "You win!"
+                                  else  "Opponent win!"
+                         ]
+                ,button [onClick PlayAgain] [text "play again"]
                 ]
