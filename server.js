@@ -180,8 +180,23 @@ async function turnHandler (socket, data) {
 
   let resp = game.turn(socket.id, data)
 
-  resp.method = 'turn'
   resp.success = resp.error ? false : true
+
+  if (resp.success) {
+    let opponentId = game.playerA.id === socket.id
+        ? game.playerB.id
+        : game.playerA.id
+
+    resp.method = 'hit'
+    for (let client of wss.clients) {
+      if (client.id === opponentId) {
+        client.send(JSON.stringify(resp))
+        break
+      }
+    }
+  }
+
+  resp.method = 'turn'
   return resp
 }
 

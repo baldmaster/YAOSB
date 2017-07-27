@@ -86,6 +86,7 @@ type GameData
     | Join  JoinData
     | Start StartData
     | Turn TurnData
+    | Hit TurnData
     | AvGames (List AvailableGame)
     | GameError ErrorData
 
@@ -133,6 +134,17 @@ turnDecoder = JD.map6 TurnData
               (JD.maybe <| field "win" JD.bool)
                   |> JD.map Turn
 
+
+hitDecoder : JD.Decoder GameData
+hitDecoder = JD.map6 TurnData
+              (field "x" JD.int)
+              (field "y" JD.int)
+              (field "hit" JD.bool)
+              (JD.maybe <| field "wrecked" JD.bool)
+              (JD.maybe <| field "size" JD.bool)
+              (JD.maybe <| field "win" JD.bool)
+                  |> JD.map Hit
+
 startDecoder : JD.Decoder GameData
 startDecoder = JD.map2 StartData
                (field "myTurn" JD.bool)
@@ -144,6 +156,7 @@ getDecoder method = case method of
                            "create" -> createDecoder
                            "join" -> joinDecoder
                            "turn" -> turnDecoder
+                           "hit"  -> hitDecoder
                            "start" -> startDecoder
                            "available games" -> Debug.log method avGamesDecoder
                            _       -> unknownMethodDecoder
@@ -216,6 +229,14 @@ update msg model =
                                Start data ->
                                    ({model | playerGrid = data.grid
                                     , gameStatus = Joined}, Cmd.none)
+                               Hit data ->
+                                   let val =
+                                           if data.hit == True then 2 else 3
+                                       g =
+                                           set (loc data.x data.y)
+                                               val
+                                               model.playerGrid
+                                   in ({model | playerGrid = g}, Cmd.none)
                                Turn  data ->
                                    let val =
                                            if data.hit == True then 1 else 2
@@ -243,9 +264,11 @@ subscriptions model =
 locationToDiv : Matrix.Location -> Int -> Html Msg
 locationToDiv location element =
     div [class "cell"
-        , if element == 1 then
-              class "occupied-cell"
-          else class "empty-cell"]
+        ,case element of
+              1 -> class "occupied-cell"
+              2 -> class "hit-cell"
+              3 -> class "missed-cell"
+              _ -> class "empty-cell" ]
     []
 
 opponentLocationToDiv : Matrix.Location -> Int -> Html Msg
