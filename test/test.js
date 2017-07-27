@@ -23,7 +23,7 @@ describe('Battleship test', () => {
 
 
   it('Client should successfully create new game', done => {
-    let client = new WebSocket(`http://localhost:8080`)
+    let client = new WebSocket(`http://localhost:9001`)
 
     client.on('message', function (data) {
       data.should.exist
@@ -43,7 +43,7 @@ describe('Battleship test', () => {
   })
 
   it('Client should successfully join game', done => {
-    let client = new WebSocket(`http://localhost:8080`)
+    let client = new WebSocket(`http://localhost:9001`)
 
     clientA.removeEventListener('message')
 
@@ -70,7 +70,6 @@ describe('Battleship test', () => {
         }))
       } else if (params.method === 'join') {
         clientB = client
-      } else if (params.method === 'start') {
 
         params.grid.length.should.be.equal(10)
 
@@ -89,7 +88,7 @@ describe('Battleship test', () => {
   })
 
   it('Client should get error when it\'s not his turn', done => {
-    let client = clientAData.move
+    let client = clientAData.myTurn
         ? clientB
         : clientA
 
@@ -99,9 +98,12 @@ describe('Battleship test', () => {
       data.should.exist
 
       let params = JSON.parse(data)
-      params.should.have.property('error')
+      if (params.method == 'turn') {
 
-      done()
+        params.should.have.property('error')
+
+        done()
+      }
     })
 
     client.send(JSON.stringify({method: 'turn', gameId, x: 0, y: 5}))
@@ -114,7 +116,7 @@ describe('Battleship test', () => {
 
   it('Player should successfully make a turn and miss', done => {
     [player, opponent,
-     playerGrid, opponentGrid] = clientAData.move
+     playerGrid, opponentGrid] = clientAData.myTurn
         ? [clientA, clientB, clientAData.grid, clientBData.grid]
         : [clientB, clientA, clientBData.grid, clientAData.grid]
 

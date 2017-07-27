@@ -8,7 +8,7 @@ let Games = new Map()
 let db = new Database({filename: './db/games', autoload: true})
 
 const WebSocket = require('ws')
-const wss = new WebSocket.Server({ port: 8080 })
+const wss = new WebSocket.Server({ port: 9001 })
 
 const DB_ERROR = 'DB_ERROR'
 const INPUT_ERROR = 'INPUT_ERROR'
@@ -132,28 +132,28 @@ async function joinHandler (socket, data) {
 
     Games.set(data.gameId, game)
 
-    socket.send(JSON.stringify({
-      method: 'join',
-      success: true,
-      info: 'You successfully joined the game'
-    }))
-
     let [a, b] = game.whoseTurn === socket.id
         ? [true, false]
         : [false, true]
 
     socket.send(JSON.stringify({
-      method: 'start',
-      move: a,
-      grid: game.playerB.grid
+      method: 'join',
+      success: true,
+      myTurn: a,
+      gameId: data.gameId,
+      grid: game.playerB.grid,
+      info: 'You successfully joined the game'
     }))
 
     for (let client of wss.clients) {
       if (client.id === game.playerA.id) {
         client.send(JSON.stringify({
           method: 'start',
-          move: b,
-          grid: game.playerA.grid
+          success: true,
+          myTurn: b,
+          gameId: data.gameId,
+          grid: game.playerA.grid,
+          info: 'Game started'
         }))
         break
       }
@@ -179,9 +179,27 @@ async function turnHandler (socket, data) {
 
   let resp = game.turn(socket.id, data)
 
-  resp.success = true
-  resp.method = 'turn'
+  resp.success = !resp.error
 
+  if (resp.success) {
+    let opponentId = game.playerA.id === socket.id
+        ? game.playerB.id
+        : game.playerA.id
+
+    resp.method = 'hit'
+    for (let client of wss.clients) {
+      if (client.id === opponentId) {
+        client.send(JSON.stringify(resp))
+        break
+      }
+    }
+  }
+
+  if (resp.win) { // game is over, user win
+    Games.delete(data.gameId)
+  }
+
+  resp.method = 'turn'
   return resp
 }
 
@@ -257,6 +275,7 @@ wss.on('connection', async function (socket) {
     switch (params.method) {
       case 'create':
         response = await createHandler(socket, params)
+
         socket.send(JSON.stringify(response))
         break
       case 'join':
@@ -281,6 +300,7 @@ wss.on('connection', async function (socket) {
   })
 
   socket.send(JSON.stringify({
+    success: true,
     method: 'available games',
     games: await getAvailableGames()
   }))

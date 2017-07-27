@@ -7,17 +7,41 @@
     "node": ">=8.0.0"
   },
   "scripts": {
-    "test": "mocha --timeout 10000 --recursive"
+    "start": "webpack-dev-server --hot --inline --content-base src/",
+    "test": "mocha --timeout 10000 --recursive",
+    "build": "rimraf dist && webpack",
+    "watch": "webpack --watch"
   },
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "autoprefixer": "^6.7.7",
+    "bootstrap-less": "^3.3.8",
+    "copy-webpack-plugin": "^3.0.1",
+    "css-loader": "^0.23.1",
+    "elm": "^0.18.0",
+    "elm-hot-loader": "^0.3.7",
+    "elm-webpack-loader": "^3.1.0",
+    "extract-text-webpack-plugin": "^1.0.1",
+    "file-loader": "^0.9.0",
+    "html-webpack-plugin": "^2.29.0",
+    "jquery": "^3.1.0",
+    "less": "^2.7.2",
+    "less-loader": "^2.2.3",
     "mocha": "^3.4.2",
+    "postcss-loader": "^0.10.1",
+    "rimraf": "^2.5.2",
     "should": "^11.2.1",
+    "style-loader": "^0.13.2",
+    "url-loader": "^0.5.7",
+    "webpack": "^1.15.0",
+    "webpack-dev-server": "^1.16.5",
+    "webpack-merge": "^0.14.1"
   },
   "dependencies": {
     "nedb": "^1.8.0",
     "nedb-promise": "^2.0.1",
+    "node-uuid": "^1.4.8",
     "uuid": "^3.1.0",
     "ws": "^3.0.0"
   }
