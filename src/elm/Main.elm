@@ -2,13 +2,18 @@ import Html exposing (..)
 import Html.Attributes exposing (..)
 import Html.Events exposing (..)
 import Json.Decode as JD exposing (..)
-import Json.Encode as JE exposing (..)
 import WebSocket
+
+import Types exposing (..)
+import Encoders exposing (..)
+import Decoders exposing (..)
 import Matrix exposing (Matrix
                        , Location
                        , square
                        , loc
-                       , set)
+                       , set
+                       , row
+                       , col)
 
 
 main : Program Never Model Msg
@@ -20,14 +25,18 @@ main =
     , subscriptions = subscriptions
     }
 
-
 wss : String
 wss =
   "ws://localhost:9001"
 
+emptyGrid : Matrix Int
+emptyGrid = square 10 (\_ -> 0)
 
--- TYPES
 
+decodeMessage : String -> Result String GameData
+decodeMessage = decodeString
+                << andThen getDecoder
+                    <| field "method" JD.string
 
 -- MODEL
 
@@ -38,9 +47,6 @@ type alias Model =
   , opponentGrid : Matrix Int
   , availableGames : List AvailableGame
   , gameStatus : GameStatus }
-
-emptyGrid : Matrix Int
-emptyGrid = square 10 (\_ -> 0)
 
 init : (Model, Cmd Msg)
 init =
@@ -56,205 +62,87 @@ type Msg
     | CancelNewGame
     | PlayAgain
 
-type alias AvailableGame = {id : String, createdAt : Int}
 
-type alias JoinData = { gameId : String
-                      , grid : Matrix Int
-                      , myTurn: Bool
-                      , info : String}
-type alias ErrorData = {method : String
-                       ,code : String
-                       ,message : String}
-type alias StartData = {myTurn : Bool,
-                        grid : Matrix Int}
-type alias TurnData  =  {x : Int
-                        ,y : Int
-                        ,hit : Bool
-                        ,wrecked : Maybe Bool
-                        ,size : Maybe Bool
-                        ,win : Maybe Bool}
+gameDataHandler : Model -> GameData -> (Model, Cmd Msg)
+gameDataHandler model gameData =
+     case gameData of
+         Create id ->
+             ({model
+                  | gameId = id
+                  , gameStatus = New}
+             , Cmd.none)
 
+         Join  data ->
+             ({model
+                  | gameId = data.gameId
+                  , playerGrid = data.grid
+                  , gameStatus = Joined}
+             , Cmd.none)
 
-type GameStatus = Undefined
-                | New
-                | Joined
-                | Win
-                | Lose
+         Start data ->
+             ({model
+                  | playerGrid = data.grid
+                  , gameStatus = Joined}
+             , Cmd.none)
 
-type GameData
-    = Create String
-    | Join  JoinData
-    | Start StartData
-    | Turn TurnData
-    | Hit TurnData
-    | AvGames (List AvailableGame)
-    | GameError ErrorData
+         Hit data ->
+             let val = if data.hit == True then 2 else 3
+                 g = set (loc data.x data.y) val model.playerGrid
+                 gs = case data.win of
+                          Just True ->  Lose
+                          _ ->  model.gameStatus
 
-createDecoder : JD.Decoder GameData
-createDecoder = JD.map Create (field "gameId" JD.string)
+             in ({model
+                     | playerGrid = g
+                     , gameStatus = gs}
+                , Cmd.none)
 
-availableGameDecoder : JD.Decoder AvailableGame
-availableGameDecoder = JD.map2 AvailableGame
-                       (field "_id" JD.string)
-                       (field "createdAt" JD.int)
+         Turn  data ->
+             let val = if data.hit == True then 1 else 2
+                 g = set (loc data.x data.y) val model.opponentGrid
+                 gs = case data.win of
+                          Just True -> Win
+                          _ ->  model.gameStatus
 
-avGamesDecoder : JD.Decoder GameData
-avGamesDecoder = JD.map AvGames
-                 (field "games" (JD.list availableGameDecoder))
+             in ({model
+                     | opponentGrid = g
+                     , gameStatus = gs}
+                , Cmd.none)
 
-joinDecoder : JD.Decoder GameData
-joinDecoder = JD.map4 JoinData
-              (field "gameId" JD.string)
-              (field "grid" matrixDecoder)
-              (field "myTurn" JD.bool)
-              (field "info" JD.string)
-                  |> JD.map Join
+         AvGames games ->
+             ({model | availableGames = games}, Cmd.none)
 
-errorDecoder : JD.Decoder GameData
-errorDecoder = JD.map3 ErrorData
-               (at ["method"] JD.string)
-               (at ["error","code"] JD.string)
-               (at ["error","message"] JD.string)
-                   |> JD.map GameError
-
-unknownMethodDecoder : JD.Decoder GameData
-unknownMethodDecoder = JD.map3 ErrorData
-                       (field "method" JD.string)
-                       (succeed "UNKNOWN_METHOD")
-                       (succeed "Unknown method")
-                           |> JD.map GameError
-
-turnDecoder : JD.Decoder GameData
-turnDecoder = JD.map6 TurnData
-              (field "x" JD.int)
-              (field "y" JD.int)
-              (field "hit" JD.bool)
-              (JD.maybe <| field "wrecked" JD.bool)
-              (JD.maybe <| field "size" JD.bool)
-              (JD.maybe <| field "win" JD.bool)
-                  |> JD.map Turn
-
-
-hitDecoder : JD.Decoder GameData
-hitDecoder = JD.map6 TurnData
-              (field "x" JD.int)
-              (field "y" JD.int)
-              (field "hit" JD.bool)
-              (JD.maybe <| field "wrecked" JD.bool)
-              (JD.maybe <| field "size" JD.bool)
-              (JD.maybe <| field "win" JD.bool)
-                  |> JD.map Hit
-
-startDecoder : JD.Decoder GameData
-startDecoder = JD.map2 StartData
-               (field "myTurn" JD.bool)
-               (field "grid" matrixDecoder)
-                   |> JD.map Start
-
-getDecoder : String -> JD.Decoder GameData
-getDecoder method = case method of
-                           "create" -> createDecoder
-                           "join" -> joinDecoder
-                           "turn" -> turnDecoder
-                           "hit"  -> hitDecoder
-                           "start" -> startDecoder
-                           "available games" -> Debug.log method avGamesDecoder
-                           _       -> unknownMethodDecoder
-
-matrixDecoder : JD.Decoder (Matrix Int)
-matrixDecoder = JD.map Matrix.fromList <| JD.list <| JD.list JD.int
-
-
-matrixToJson : Matrix Int -> JE.Value
-matrixToJson m = JE.list
-                 <| List.map (JE.list  << List.map JE.int)
-                 <| Matrix.toList m
-
-decodeMessage : String -> Result String GameData
-decodeMessage = decodeString
-                << andThen getDecoder
-                    <| field "method" JD.string
+         GameError e -> (model, Cmd.none) -- TODO
 
 update : Msg -> Model -> (Model, Cmd Msg)
 update msg model =
   case msg of
     CancelNewGame ->
         ({model | gameStatus = Undefined}, Cmd.none) -- TODO: delete new game on server
+
     PlayAgain ->
         ({model | gameStatus = Undefined}, Cmd.none)
+
     CreateGame grid ->
-        let message = encode 0
-                      <| JE.object [
-                           ("method", JE.string "create")
-                          ,("grid", case grid of
-                                        Just g -> matrixToJson g
-                                        _ ->  JE.null)
-                          ]
+        let message = encodeCreateMessage grid
         in (model, WebSocket.send wss message)
+
     JoinGame gameId grid ->
-        let message = encode 0
-                      <| JE.object [
-                           ("method", JE.string "join")
-                          ,("gameId", JE.string gameId)
-                          ,("grid",   case grid of
-                                          Just g -> matrixToJson g
-                                          _ ->   JE.null)
-                          ]
+        let message = encodeJoinMessage gameId grid
         in (model, WebSocket.send wss message)
 
     NewTurn location ->
-        let (x, y) = location
-            message = encode 0
-                      <| JE.object [
-                           ("method", JE.string "turn")
-                          ,("gameId", JE.string model.gameId)
-                          ,("x", JE.int x)
-                          ,("y", JE.int y)
-                          ]
+        let message = encodeTurnMessage model.gameId location
         in  (model, WebSocket.send wss message)
+
     NewMessage str ->
         case decodeString (field "success" JD.bool) str of
-            Ok False ->  (model, Cmd.none)
+            Ok False ->  (model, Cmd.none) -- TODO: handle errors
             Ok True  ->
                 let data = decodeMessage str
                 in case data of
-                       Ok gameData ->
-                           case gameData of
-                               Create id ->   ({model | gameId = id
-                                               , gameStatus = New}, Cmd.none)
-                               Join  data ->
-                                   ({model | gameId = data.gameId
-                                    , playerGrid = data.grid
-                                    , gameStatus = Joined}, Cmd.none)
-                               Start data ->
-                                   ({model | playerGrid = data.grid
-                                    , gameStatus = Joined}, Cmd.none)
-                               Hit data ->
-                                   let val =
-                                           if data.hit == True then 2 else 3
-                                       g =
-                                           set (loc data.x data.y)
-                                               val
-                                               model.playerGrid
-                                   in ({model | playerGrid = g
-                                       , gameStatus = case data.win of
-                                                          Just True ->  Lose
-                                                          _ ->  model.gameStatus}, Cmd.none)
-                               Turn  data ->
-                                   let val =
-                                           if data.hit == True then 1 else 2
-                                       g =
-                                           set (loc data.x data.y)
-                                               val
-                                               model.opponentGrid
-                                   in ({model | opponentGrid = g
-                                       , gameStatus = case data.win of
-                                                          Just True -> Win
-                                                          _ ->  model.gameStatus}, Cmd.none)
-                               AvGames games ->
-                                   ({model | availableGames = games}, Cmd.none)
-                               GameError e -> (model, Cmd.none) -- TODO
-                       Err e -> Debug.log e (model, Cmd.none)   -- TODO
+                       Ok gameData -> gameDataHandler model gameData
+                       Err e -> Debug.log e (model, Cmd.none) -- TODO
             Err e -> Debug.log e (model, Cmd.none) -- TODO
 
 
