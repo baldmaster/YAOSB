@@ -207,7 +207,8 @@ update msg model =
                                     , playerGrid = data.grid
                                     , gameStatus = Joined}, Cmd.none)
                                Start data ->
-                                   ({model | playerGrid = data.grid}, Cmd.none)
+                                   ({model | playerGrid = data.grid
+                                    , gameStatus = Joined}, Cmd.none)
                                Turn  data ->
                                    let val =
                                            if data.hit == True then 1 else 2
