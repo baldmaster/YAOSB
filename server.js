@@ -32,6 +32,7 @@ async function createHandler (socket, {grid, userName}) {
   }
 
   let gameId = uuid.v4()
+  
 
   let gameObject = {
     _id: gameId,

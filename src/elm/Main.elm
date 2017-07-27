@@ -6,7 +6,9 @@ import Json.Encode as JE exposing (..)
 import WebSocket
 import Matrix exposing (Matrix
                        , Location
-                       , square)
+                       , square
+                       , loc
+                       , set)
 
 
 main : Program Never Model Msg
@@ -34,15 +36,15 @@ type alias Model =
   { gameId : String
   , playerGrid : Matrix Int
   , opponentGrid : Matrix Int
-  , availableGames: List AvailableGame }
+  , availableGames : List AvailableGame
+  , gameStatus : GameStatus }
 
 emptyGrid : Matrix Int
 emptyGrid = square 10 (\_ -> 0)
 
 init : (Model, Cmd Msg)
 init =
-    (Model "" emptyGrid emptyGrid [], Cmd.none)
-
+    (Model "" emptyGrid emptyGrid [] Undefined, Cmd.none)
 
 -- UPDATE
 
@@ -51,6 +53,7 @@ type Msg
     | JoinGame String (Maybe (Matrix Int))
     | NewTurn Location
     | NewMessage String
+    | CancelNewGame
 
 type alias AvailableGame = {id : String, createdAt : Int}
 
@@ -69,6 +72,9 @@ type alias TurnData  =  {x : Int
                         ,wrecked : Maybe Bool
                         ,size : Maybe Bool
                         ,win : Maybe Bool}
+
+
+type GameStatus = Undefined | New | Joined
 
 type GameData
     = Create String
@@ -154,6 +160,8 @@ decodeMessage = decodeString
 update : Msg -> Model -> (Model, Cmd Msg)
 update msg model =
   case msg of
+    CancelNewGame ->
+        ({model | gameStatus = Undefined}, Cmd.none)
     CreateGame grid ->
         let message = encode 0
                       <| JE.object [
@@ -192,17 +200,27 @@ update msg model =
                 in case data of
                        Ok gameData ->
                            case gameData of
-                               Create id ->   ({model | gameId = id}, Cmd.none)
-                               Join  data ->  ({model | gameId = data.gameId, playerGrid = data.grid}, Cmd.none)
-                               Start data ->  ({model | playerGrid = data.grid}, Cmd.none)
+                               Create id ->   ({model | gameId = id
+                                               , gameStatus = New}, Cmd.none)
+                               Join  data ->
+                                   ({model | gameId = data.gameId
+                                    , playerGrid = data.grid
+                                    , gameStatus = Joined}, Cmd.none)
+                               Start data ->
+                                   ({model | playerGrid = data.grid}, Cmd.none)
                                Turn  data ->
-                                   let val = if data.hit == True then 1 else 2
-                                       oppGrid = Matrix.set (Matrix.loc data.x data.y) val model.opponentGrid
-                                   in ({model | opponentGrid = oppGrid}, Cmd.none)
-                               AvGames games -> ({model | availableGames = games}, Cmd.none)
+                                   let val =
+                                           if data.hit == True then 1 else 2
+                                       g =
+                                           set (loc data.x data.y)
+                                               val
+                                               model.opponentGrid
+                                   in ({model | opponentGrid = g}, Cmd.none)
+                               AvGames games ->
+                                   ({model | availableGames = games}, Cmd.none)
                                GameError e -> (model, Cmd.none) -- TODO
-                       Err e -> Debug.log e (model, Cmd.none)
-            Err e -> Debug.log e (model, Cmd.none)
+                       Err e -> Debug.log e (model, Cmd.none)   -- TODO
+            Err e -> Debug.log e (model, Cmd.none) -- TODO
 
 
 -- SUBSCRIPTIONS
@@ -238,24 +256,38 @@ availableGames = div [class "games"]
                                   div [class "av-game"]
                                   [
                                    button [onClick <| JoinGame g.id Nothing]
-                                       [text "join game"]
+                                       [text "join this game"]
                                   ])
 
 view : Model -> Html Msg
 view model =
-    if model.gameId == "" then
-        div [] [
-             button [onClick <| CreateGame Nothing] [text "new game"]
-            ,availableGames model.availableGames
-            ]
-    else
-        div [] [
-             div [class "gridBox"]
-                 <| List.map(\row -> div [class "row"] row)
-                 <| Matrix.toList
-                 <| Matrix.mapWithLocation locationToDiv model.playerGrid
-            ,div [class "gridBox"]
-                 <| List.map(\row -> div [class "row"] row)
-                 <| Matrix.toList
-                 <| Matrix.mapWithLocation opponentLocationToDiv model.opponentGrid
-            ]
+    case model.gameStatus of
+        Undefined ->
+            div [] [
+                 button [onClick <| CreateGame Nothing] [text "new game"]
+                ,availableGames model.availableGames
+                ]
+        New ->
+            div [] [
+                 div [class "gridBox"]
+                     <| List.map(\row -> div [class "row"] row)
+                     <| Matrix.toList
+                     <| Matrix.mapWithLocation locationToDiv model.playerGrid
+                 ,div [class "gridBox", class "waiting-opponent"] [
+                      span [] [ text "Waiting for opponent to join..." ]
+                     ,button [onClick CancelNewGame] [text "cancel"]
+                     ]
+                ]
+
+        Joined ->
+            div [] [
+                 div [class "gridBox"]
+                     <| List.map(\row -> div [class "row"] row)
+                     <| Matrix.toList
+                     <| Matrix.mapWithLocation locationToDiv model.playerGrid
+                ,div [class "gridBox"]
+                     <| List.map(\row -> div [class "row"] row)
+                     <| Matrix.toList
+                     <| Matrix.mapWithLocation
+                     opponentLocationToDiv model.opponentGrid
+                ]
