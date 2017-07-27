@@ -1,10 +1,10 @@
 const {generateRandomGrid,
        generateVesselsMap} = require('./helpers')
 
-function Player (id, grid = generateRandomGrid()) {
+function Player (id, grid) {
   this.id = id
-  this.grid = grid
-  this.vessels = generateVesselsMap(grid)
+  this.grid = grid || generateRandomGrid()
+  this.vessels = generateVesselsMap(this.grid)
 }
 
 Player.prototype.isHit = function ({x, y}) {
@@ -13,15 +13,15 @@ Player.prototype.isHit = function ({x, y}) {
     let section = (+x) * 10 + (+y)
     let vessel = this.vessels.get(section)
     vessel.vessel.delete(section)
+    this.vessels.delete(section)
 
     data.hit = true
-    if (!vessel.size) {
+    if (!vessel.vessel.size) {
       data.wreked = true
       data.size = vessel.size
-      this.vessels.delete(section)
 
       // when only 'bySize' key left
-      if (this.vessel.size === 1) {
+      if (this.vessels.size === 1) {
         data.win = true
       }
     }
