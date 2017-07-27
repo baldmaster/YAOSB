@@ -7,11 +7,14 @@ type alias JoinData = { gameId : String
                       , grid : Matrix Int
                       , myTurn: Bool
                       , info : String}
+
 type alias ErrorData = {method : String
                        ,code : String
                        ,message : String}
+
 type alias StartData = {myTurn : Bool,
                         grid : Matrix Int}
+
 type alias TurnData  =  {x : Int
                         ,y : Int
                         ,hit : Bool
