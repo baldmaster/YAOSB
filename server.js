@@ -196,6 +196,10 @@ async function turnHandler (socket, data) {
     }
   }
 
+  if (resp.win) { // game is over, user win
+    Games.delete(data.gameId)
+  }
+
   resp.method = 'turn'
   return resp
 }
