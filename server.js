@@ -32,7 +32,6 @@ async function createHandler (socket, {grid, userName}) {
   }
 
   let gameId = uuid.v4()
-  
 
   let gameObject = {
     _id: gameId,
@@ -140,8 +139,8 @@ async function joinHandler (socket, data) {
     socket.send(JSON.stringify({
       method: 'join',
       success: true,
-      myTurn:  a,
-      gameId:  data.gameId,
+      myTurn: a,
+      gameId: data.gameId,
       grid: game.playerB.grid,
       info: 'You successfully joined the game'
     }))
@@ -180,7 +179,7 @@ async function turnHandler (socket, data) {
 
   let resp = game.turn(socket.id, data)
 
-  resp.success = resp.error ? false : true
+  resp.success = !resp.error
 
   if (resp.success) {
     let opponentId = game.playerA.id === socket.id
