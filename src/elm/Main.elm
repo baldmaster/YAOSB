@@ -180,48 +180,67 @@ availableGames = div [class "games"]
                  << List.map (\g ->
                                   div [class "av-game"]
                                   [
-                                   button [onClick <| JoinGame g.id Nothing]
+                                   button
+                                       [onClick <| JoinGame g.id Nothing]
                                        [text "join this game"]
                                   ])
 
-view : Model -> Html Msg
-view model =
+gameView : Model -> List (Html Msg)
+gameView model =
     case model.gameStatus of
         Undefined ->
-            div [] [
-                 button [onClick <| CreateGame Nothing] [text "new game"]
-                ,availableGames model.availableGames
-                ]
+            [
+             button
+                 [class "new-game-button"
+                 ,onClick <| CreateGame Nothing]
+                 [text "create new game"]
+            ,div [class "v-spacer"] []
+            ,availableGames model.availableGames
+            ]
         New ->
-            div [] [
-                 div [class "gridBox"]
-                     <| List.map(\row -> div [class "row"] row)
-                     <| Matrix.toList
-                     <| Matrix.mapWithLocation locationToDiv model.playerGrid
-                 ,div [class "gridBox", class "waiting-opponent"] [
-                      span [] [ text "Waiting for opponent to join..." ]
-                     ,button [onClick CancelNewGame] [text "cancel"]
-                     ]
-                ]
+            [
+             div [class "gridBox"]
+                 <| List.map(\row -> div [class "row"] row)
+                 <| Matrix.toList
+                 <| Matrix.mapWithLocation locationToDiv model.playerGrid
+            ,div [class "gridBox"
+                 ,class "wo"] [
+                  span
+                      [class "wo-message"]
+                      [text "Waiting for opponent to join..."]
+                 ,button
+                      [class "cancel-ng"
+                      ,onClick CancelNewGame]
+                      [text "cancel"]
+                 ]
+            ]
 
         Joined ->
-            div [] [
-                 div [class "gridBox"]
-                     <| List.map(\row -> div [class "row"] row)
-                     <| Matrix.toList
-                     <| Matrix.mapWithLocation locationToDiv model.playerGrid
-                ,div [class "gridBox"]
-                     <| List.map(\row -> div [class "row"] row)
-                     <| Matrix.toList
-                     <| Matrix.mapWithLocation
-                     opponentLocationToDiv model.opponentGrid
-                ]
+            [
+             div [class "gridBox"]
+                 <| List.map(\row -> div [class "row"] row)
+                 <| Matrix.toList
+                 <| Matrix.mapWithLocation locationToDiv model.playerGrid
+            ,div [class "gridBox"]
+                <| List.map(\row -> div [class "row"] row)
+                <| Matrix.toList
+                <| Matrix.mapWithLocation
+                    opponentLocationToDiv model.opponentGrid
+            ]
         _ ->
-            div [] [
-                 span [] [text "Game over"]
-                ,span [] [text <| if model.gameStatus == Win then
-                                      "You win!"
-                                  else  "Opponent win!"
-                         ]
-                ,button [onClick PlayAgain] [text "play again"]
-                ]
+            [
+             span [] [text "Game over"]
+            ,span [] [text <| if model.gameStatus == Win then
+                                  "You win!"
+                              else  "Opponent win!"
+                     ]
+            ,button [onClick PlayAgain] [text "play again"]
+            ]
+
+view : Model -> Html Msg
+view model =
+    div [class "wrapper"] [
+         h3 [class "welcome"] [text "SEABATTLE"]
+         , div []
+             <| gameView model
+        ]
