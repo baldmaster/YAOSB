@@ -4,6 +4,7 @@ import Html.Events exposing (..)
 import Json.Decode as JD exposing (..)
 import WebSocket
 
+import StartScreen as SS
 import Types exposing (..)
 import Encoders exposing (..)
 import Decoders exposing (..)
@@ -45,18 +46,17 @@ type alias Model =
   { gameId : String
   , playerGrid : Matrix Int
   , opponentGrid : Matrix Int
-  , availableGames : List AvailableGame
+  , startScreenModel : SS.Model
   , gameStatus : GameStatus }
 
 init : (Model, Cmd Msg)
 init =
-    (Model "" emptyGrid emptyGrid [] Undefined, Cmd.none)
+    (Model "" emptyGrid emptyGrid SS.init Undefined, Cmd.none)
 
 -- UPDATE
 
 type Msg
-    = CreateGame (Maybe (Matrix Int))
-    | JoinGame String (Maybe (Matrix Int))
+    = StartScreenMsg SS.Msg
     | NewTurn Location
     | NewMessage String
     | CancelNewGame
@@ -110,40 +110,49 @@ gameDataHandler model gameData =
                 , Cmd.none)
 
          AvGames games ->
-             ({model | availableGames = games}, Cmd.none)
+             let ( updatedStartScreenModel, startScreenCmd ) =
+                     SS.update
+                         (SS.AvailableGames games)
+                             model.startScreenModel
+             in ({model | startScreenModel  = updatedStartScreenModel}
+                , Cmd.map StartScreenMsg startScreenCmd )
 
          GameError e -> (model, Cmd.none) -- TODO
 
 update : Msg -> Model -> (Model, Cmd Msg)
 update msg model =
   case msg of
-    CancelNewGame ->
-        ({model | gameStatus = Undefined}, Cmd.none) -- TODO: delete new game on server
+      StartScreenMsg (SS.CreateGame grid) ->
+          let message = encodeCreateMessage grid
+          in (model, WebSocket.send wss message)
 
-    PlayAgain ->
-        ({model | gameStatus = Undefined}, Cmd.none)
 
-    CreateGame grid ->
-        let message = encodeCreateMessage grid
-        in (model, WebSocket.send wss message)
+      StartScreenMsg (SS.JoinGame gameId grid) ->
+          let message = encodeJoinMessage gameId grid
+          in (model, WebSocket.send wss message)
 
-    JoinGame gameId grid ->
-        let message = encodeJoinMessage gameId grid
-        in (model, WebSocket.send wss message)
+      StartScreenMsg _ ->
+          Debug.log "got message" ({model | gameStatus = Undefined}, Cmd.none)
 
-    NewTurn location ->
-        let message = encodeTurnMessage model.gameId location
-        in  (model, WebSocket.send wss message)
+      CancelNewGame ->
+          ({model | gameStatus = Undefined}, Cmd.none) -- TODO: delete new game on server
 
-    NewMessage str ->
-        case decodeString (field "success" JD.bool) str of
-            Ok False ->  (model, Cmd.none) -- TODO: handle errors
-            Ok True  ->
-                let data = decodeMessage str
-                in case data of
-                       Ok gameData -> gameDataHandler model gameData
-                       Err e -> Debug.log e (model, Cmd.none) -- TODO
-            Err e -> Debug.log e (model, Cmd.none) -- TODO
+      PlayAgain ->
+          ({model | gameStatus = Undefined}, Cmd.none)
+
+      NewTurn location ->
+          let message = encodeTurnMessage model.gameId location
+          in  (model, WebSocket.send wss message)
+
+      NewMessage str ->
+          case decodeString (field "success" JD.bool) str of
+              Ok False ->  (model, Cmd.none) -- TODO: handle errors
+              Ok True  ->
+                  let data = decodeMessage str
+                  in case data of
+                         Ok gameData -> gameDataHandler model gameData
+                         Err e -> Debug.log e (model, Cmd.none) -- TODO
+              Err e -> Debug.log e (model, Cmd.none) -- TODO
 
 
 -- SUBSCRIPTIONS
@@ -175,28 +184,12 @@ opponentLocationToDiv location element =
         , onClick <| NewTurn location]
     []
 
-availableGames : List AvailableGame -> Html Msg
-availableGames = div [class "games"]
-                 << List.map (\g ->
-                                  div [class "av-game"]
-                                  [
-                                   button
-                                       [onClick <| JoinGame g.id Nothing]
-                                       [text "join this game"]
-                                  ])
 
 gameView : Model -> List (Html Msg)
 gameView model =
     case model.gameStatus of
         Undefined ->
-            [
-             button
-                 [class "new-game-button"
-                 ,onClick <| CreateGame Nothing]
-                 [text "create new game"]
-            ,div [class "v-spacer"] []
-            ,availableGames model.availableGames
-            ]
+            [Html.map StartScreenMsg (SS.view model.startScreenModel) ]
         New ->
             [
              div [class "gridBox"]
