@@ -19,11 +19,6 @@ type alias Model =
     { availableGames : List AvailableGame
     }
 
-
-wss : String
-wss =
-  "ws://localhost:9001"
-
 type alias MaybeGrid = Maybe (Matrix Int)
 
 type Msg
@@ -44,7 +39,6 @@ availableGames = div [class "games"]
                                        [onClick <| JoinGame g.id Nothing]
                                        [text "join this game"]
                                   ])
-
 
 update : Msg -> Model -> (Model, Cmd Msg)
 update msg model =

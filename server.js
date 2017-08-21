@@ -195,11 +195,12 @@ async function turnHandler (socket, data) {
     }
   }
 
+  resp.method = 'turn'
   if (resp.win) { // game is over, user win
     Games.delete(data.gameId)
+    await db.remove({_id: data.gameId})
   }
 
-  resp.method = 'turn'
   return resp
 }
 
