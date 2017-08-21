@@ -23,9 +23,9 @@ type alias TurnData  =  {x : Int
                         ,win : Maybe Bool}
 
 
-type GameStatus = Undefined
+type GameStatus = StartScreen
                 | New
-                | Joined
+                | Game
                 | Win
                 | Lose
 
