@@ -179,7 +179,7 @@ gameView model =
             ]
         _ ->
             [
-             span [] [text "Game over"]
+             span [] [text "Game over. "]
             ,span [] [text <| if model.gameStatus == Win then
                                   "You win!"
                               else  "Opponent win!"

@@ -44,49 +44,81 @@ type Msg
     = GameMessage G.Msg
     | NewMessage String
 
+gameMsgHandler : G.Msg -> Model -> (Model, Cmd Msg)
+gameMsgHandler msg model =
+    case msg of
+        G.StartScreenMsg ssMsg ->
+            case ssMsg of
+                SS.CreateGame grid ->
+                    let
+                        message = encodeCreateMessage grid
+                    in
+                        (model, WebSocket.send wss message)
+
+                SS.JoinGame gameId grid ->
+                    let
+                        message = encodeJoinMessage gameId grid
+                    in
+                        (model, WebSocket.send wss message)
+
+                _ ->
+                    let
+                        (updatedGameModel, gameCmd) =
+                            G.update msg model.gameModel
+                    in
+                        ({ model | gameModel = updatedGameModel}
+                        , Cmd.map GameMessage gameCmd)
+
+        G.CancelNewGame ->
+            let
+                (updatedGameModel, gameCmd) =
+                    G.update G.CancelNewGame model.gameModel
+            in
+                ({ model | gameModel = updatedGameModel}, Cmd.none)
+
+        G.NewTurn location ->
+            let
+                message = encodeTurnMessage
+                          model.gameModel.gameId
+                              location
+            in
+                (model, WebSocket.send wss message)
+
+        _ ->
+            let
+                (updatedGameModel, gameCmd) =
+                    G.update msg model.gameModel
+            in
+                ({ model | gameModel = updatedGameModel}
+                , Cmd.map GameMessage gameCmd)
+
+
 update : Msg -> Model -> (Model, Cmd Msg)
 update msg model =
   case msg of
-      GameMessage (G.StartScreenMsg (SS.CreateGame grid)) ->
-          let message = encodeCreateMessage grid
-          in (model, WebSocket.send wss message)
-
-      GameMessage (G.StartScreenMsg (SS.JoinGame gameId grid)) ->
-          let message = encodeJoinMessage gameId grid
-          in (model, WebSocket.send wss message)
-
-      GameMessage (G.CancelNewGame) ->
-          let (updatedGameModel, gameCmd) =
-                  G.update G.CancelNewGame model.gameModel
-          in
-              ({ model | gameModel = updatedGameModel}, Cmd.none)
-
-      GameMessage (G.NewTurn location) ->
-          let message = encodeTurnMessage model.gameModel.gameId location
-          in  (model, WebSocket.send wss message)
-
-      GameMessage G.PlayAgain ->
-          let (updatedGameModel, gameCmd) =
-                  G.update G.CancelNewGame model.gameModel
-          in
-              ({ model | gameModel = updatedGameModel}, Cmd.none)
-
-      GameMessage _ ->
-          (model, Cmd.none)
+      GameMessage m -> gameMsgHandler m model
 
       NewMessage str ->
           case decodeString (field "success" JD.bool) str of
               Ok False ->  (model, Cmd.none) -- TODO: handle errors
+
               Ok True  ->
-                  let data = decodeMessage str
-                  in case data of
+                  let
+                      data = decodeMessage str
+                  in
+                      case data of
                          Ok gameData ->
-                             let (updatedGameModel, gameCmd) =
-                                     G.update (G.NewData gameData) model.gameModel
+                             let
+                                 (updatedGameModel, gameCmd) =
+                                     G.update
+                                         (G.NewData gameData)
+                                             model.gameModel
                              in
                                  ({ model | gameModel = updatedGameModel}
                                   , Cmd.none)
+
                          Err e -> Debug.log e (model, Cmd.none) -- TODO
+
               Err e -> Debug.log e (model, Cmd.none) -- TODO
 
 
