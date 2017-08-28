@@ -28,6 +28,14 @@ encodeCreateMessage grid =
                           _ ->  null)
             ]
 
+encodeCancelNewGameMessage : String -> String
+encodeCancelNewGameMessage gameId =
+    encode 0
+    <| object [
+         ("method", string "cancelNewGame")
+        ,("gameId", string gameId)
+        ]
+
 encodeTurnMessage : String -> Location -> String
 encodeTurnMessage gameId location =
     encode 0

@@ -73,8 +73,10 @@ gameMsgHandler msg model =
             let
                 (updatedGameModel, gameCmd) =
                     G.update G.CancelNewGame model.gameModel
+                message = encodeCancelNewGameMessage model.gameModel.gameId
             in
-                ({ model | gameModel = updatedGameModel}, Cmd.none)
+                ({ model | gameModel = updatedGameModel}
+                , WebSocket.send wss message)
 
         G.NewTurn location ->
             let
