@@ -204,6 +204,18 @@ async function turnHandler (socket, data) {
   return resp
 }
 
+async function cancelNewGameHandler (socket, data) {
+  Games.delete(data.gameId)
+  let removed = await db.remove({_id: data.gameId})
+
+  if (removed) {
+    socket.send(JSON.stringify({
+      success: true,
+      method: 'available games',
+      games: await getAvailableGames()
+    }))
+  }
+}
 wss.on('connection', async function (socket) {
   // assign unique id
   socket.id = uuid.v4()
@@ -282,11 +294,15 @@ wss.on('connection', async function (socket) {
       case 'join':
         await joinHandler(socket, params)
         break
+
       case 'turn':
         response = await turnHandler(socket, params)
         socket.send(JSON.stringify(response))
 
+      case 'cancelNewGame':
+        await cancelNewGameHandler(socket, params)
         break
+
       default:
         response = {
           method: params.method,
