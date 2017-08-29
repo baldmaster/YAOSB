@@ -43,7 +43,12 @@ function Game (playerA, playerB) {
 
 Game.prototype.turn = function (playerId, {x, y}) {
   if (this.whoseTurn !== playerId) {
-    return {error: 'It\'s not your turn!'}
+    return {
+      error: {
+        code: 'NOT_ALLOWED',
+        message: 'It\'s not your turn!'
+      }
+    }
   }
 
   let opponent = playerId === this.playerA.id
