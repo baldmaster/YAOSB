@@ -133,6 +133,5 @@ if ( TARGET_ENV === 'production' ) {
           // mangle:  true
       })
     ]
-
   })
 }

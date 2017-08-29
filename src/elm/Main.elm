@@ -28,8 +28,10 @@ decodeMessage = decodeString
                 << andThen getDecoder
                     <| field "method" JD.string
 
--- MODEL
+decodeError : String -> Result String GameData
+decodeError = decodeString errorDecoder
 
+-- MODEL
 
 type alias Model =
   { gameModel : G.Model }
@@ -102,11 +104,11 @@ update msg model =
 
       NewMessage str ->
           case decodeString (field "success" JD.bool) str of
-              Ok False ->  (model, Cmd.none) -- TODO: handle errors
-
-              Ok True  ->
+              Ok msg ->
                   let
-                      data = decodeMessage str
+                      data = case msg of
+                                 True -> decodeMessage str
+                                 False -> decodeError str
                   in
                       case data of
                          Ok gameData ->
@@ -121,7 +123,7 @@ update msg model =
 
                          Err e -> Debug.log e (model, Cmd.none) -- TODO
 
-              Err e -> Debug.log e (model, Cmd.none) -- TODO
+              Err e -> Debug.log ("RESPONSE " ++ e) (model, Cmd.none) -- TODO
 
 
 -- SUBSCRIPTIONS

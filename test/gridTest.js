@@ -2,7 +2,7 @@ const should = require('should')
 const { generateRandomGrid,
         generateVesselsMap,
         validateGrid,
-        generateEmptyGrid } = require('../src/helpers')
+        generateEmptyGrid } = require('../helpers')
 
 describe('Grid helpers test', () => {
   let validGrid
