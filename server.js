@@ -1,7 +1,7 @@
 const uuid = require('uuid')
-const {validateGrid} = require('./src/helpers')
+const {validateGrid} = require('./helpers')
 const Database = require('nedb-promise')
-const {Game, Player} = require('./src/game')
+const {Game, Player} = require('./game')
 
 let Games = new Map()
 
@@ -298,6 +298,7 @@ wss.on('connection', async function (socket) {
       case 'turn':
         response = await turnHandler(socket, params)
         socket.send(JSON.stringify(response))
+        break
 
       case 'cancelNewGame':
         await cancelNewGameHandler(socket, params)
