@@ -121,15 +121,13 @@ gameDataHandler model gameData =
          GameError e ->
              ({model | error = Just e}, Cmd.none) -- TODO
 
-
-
 update : Msg -> Model -> (Model, Cmd Msg)
 update msg model =
   case msg of
       StartScreenMsg _ ->
           ({model | gameStatus = StartScreen}, Cmd.none)
 
-      CancelNewGame -> Debug.log "cancel game"
+      CancelNewGame ->
           ({model
                | gameId = ""
                , gameStatus = StartScreen}, Cmd.none) -- TODO: delete new game on server

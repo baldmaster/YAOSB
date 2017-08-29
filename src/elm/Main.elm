@@ -123,7 +123,7 @@ update msg model =
 
                          Err e -> Debug.log e (model, Cmd.none) -- TODO
 
-              Err e -> Debug.log e (model, Cmd.none) -- TODO
+              Err e -> Debug.log ("RESPONSE " ++ e) (model, Cmd.none) -- TODO
 
 
 -- SUBSCRIPTIONS

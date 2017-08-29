@@ -15,6 +15,19 @@ const INPUT_ERROR = 'INPUT_ERROR'
 const JOIN_ERROR = 'JOIN_ERROR'
 const OPPONENT_DISCONNECTED = 'OPPONENT_DISCONNECTED'
 
+wss.broadcastAvailableGames = async function () {
+  let games = await getAvailableGames()
+  let message = JSON.stringify({
+    success: true,
+    method: 'available games',
+    games: games
+  })
+
+  for (let client of wss.clients) {
+    client.send(message)
+  }
+}
+
 async function getAvailableGames () {
   return db.find({started: false}, {'playerA.grid': 0})
 }
@@ -46,6 +59,7 @@ async function createHandler (socket, {grid, userName}) {
 
   try {
     await db.insert(gameObject)
+    wss.broadcastAvailableGames()
 
     return {
       method: 'create',
@@ -145,6 +159,7 @@ async function joinHandler (socket, data) {
       info: 'You successfully joined the game'
     }))
 
+    wss.broadcastAvailableGames()
     for (let client of wss.clients) {
       if (client.id === game.playerA.id) {
         client.send(JSON.stringify({
@@ -209,11 +224,7 @@ async function cancelNewGameHandler (socket, data) {
   let removed = await db.remove({_id: data.gameId})
 
   if (removed) {
-    socket.send(JSON.stringify({
-      success: true,
-      method: 'available games',
-      games: await getAvailableGames()
-    }))
+    wss.broadcastAvailableGames()
   }
 }
 wss.on('connection', async function (socket) {
@@ -224,7 +235,6 @@ wss.on('connection', async function (socket) {
     let playerId = socket.id
 
     let gameData = await db.findOne({
-      started: true,
       $or: [
         {
           'playerA.id': playerId
@@ -242,26 +252,29 @@ wss.on('connection', async function (socket) {
       return
     }
 
-    let opponentId = gameData.playerA.id === socket.id
-        ? gameData.playerB.id
-        : gameData.playerA.id
+    if (gameData.started) {
+      let opponentId = gameData.playerA.id === socket.id
+          ? gameData.playerB.id
+          : gameData.playerA.id
 
-    for (let client of wss.clients) {
-      if (client.id === opponentId) {
-        client.send(JSON.stringify({
-          method: 'game error',
-          error: {
-            code: OPPONENT_DISCONNECTED,
-            message: 'Opponent disconnected, cannot continue.'
-          }
-        }))
-        break
+      for (let client of wss.clients) {
+        if (client.id === opponentId) {
+          client.send(JSON.stringify({
+            method: 'game error',
+            error: {
+              code: OPPONENT_DISCONNECTED,
+              message: 'Opponent disconnected, cannot continue.'
+            }
+          }))
+          break
+        }
       }
     }
 
     try {
       await db.remove({_id: gameData._id})
       Games.delete(gameData._id)
+      wss.broadcastAvailableGames()
     } catch (e) {
       // do something
     }
