@@ -3,7 +3,6 @@ module Game exposing(..)
 import Html exposing (..)
 import Html.Attributes exposing (..)
 import Html.Events exposing (..)
-import Json.Decode as JD exposing (..)
 
 import StartScreen as SS
 import Types exposing (..)
@@ -15,21 +14,27 @@ import Matrix exposing (Matrix
                        , row
                        , col)
 
-
 emptyGrid : Matrix Int
 emptyGrid = square 10 (\_ -> 0)
-
 
 type alias Model =
   { gameId : String
   , playerGrid : Matrix Int
   , opponentGrid : Matrix Int
   , startScreenModel : SS.Model
-  , gameStatus : GameStatus }
+  , gameStatus : GameStatus
+  , error: Maybe ErrorData
+  }
 
 init : Model
 init =
-    Model "" emptyGrid emptyGrid SS.init StartScreen
+    { gameId = ""
+    , playerGrid = emptyGrid
+    , opponentGrid = emptyGrid
+    , startScreenModel = SS.init
+    , gameStatus = StartScreen
+    , error = Nothing
+    }
 
 type Msg
     = StartScreenMsg SS.Msg
@@ -37,6 +42,7 @@ type Msg
     | NewData GameData
     | CancelNewGame
     | PlayAgain
+    | DismissAlert
 
 gameDataHandler : Model -> GameData -> (Model, Cmd Msg)
 gameDataHandler model gameData =
@@ -62,44 +68,44 @@ gameDataHandler model gameData =
 
          Hit data ->
              let
-                 val =
+                 cellValue =
                      if data.hit == True then
                          2
                      else
                          3
 
-                 g = set (loc data.x data.y) val model.playerGrid
+                 grid = set (loc data.x data.y) cellValue model.playerGrid
 
-                 gs =
+                 newGameStatus =
                      case data.win of
                          Just True ->  Lose
                          _ ->  model.gameStatus
 
              in
                  ({model
-                     | playerGrid = g
-                     , gameStatus = gs}
+                     | playerGrid = grid
+                     , gameStatus = newGameStatus}
                 , Cmd.none)
 
          Turn  data ->
              let
-                 val =
+                 cellValue =
                      if data.hit == True then
                          1
                      else
                          2
 
-                 g = set (loc data.x data.y) val model.opponentGrid
+                 grid = set (loc data.x data.y) cellValue model.opponentGrid
 
-                 gs =
+                 newGameStatus  =
                      case data.win of
                          Just True -> Win
                          _ ->  model.gameStatus
 
              in
                  ({model
-                      | opponentGrid = g
-                      , gameStatus = gs}
+                      | opponentGrid = grid
+                      , gameStatus = newGameStatus}
                  , Cmd.none)
 
          AvGames games ->
@@ -112,7 +118,9 @@ gameDataHandler model gameData =
                  ({model | startScreenModel  = updatedStartScreenModel}
                  , Cmd.map StartScreenMsg startScreenCmd )
 
-         GameError e -> (model, Cmd.none) -- TODO
+         GameError e ->
+             ({model | error = Just e}, Cmd.none) -- TODO
+
 
 
 update : Msg -> Model -> (Model, Cmd Msg)
@@ -134,6 +142,9 @@ update msg model =
 
       NewData gameData ->
           gameDataHandler model gameData
+
+      DismissAlert ->
+          ({model | error = Nothing}, Cmd.none)
 
 
 locationToDiv : Matrix.Location -> Int -> Html Msg
@@ -203,6 +214,22 @@ gameView model =
             ,button [onClick PlayAgain] [text "play again"]
             ]
 
+alertView : Maybe ErrorData -> Html Msg
+alertView error =
+    case error of
+        Just e ->
+            div [class "alert" ]
+                [ h4 [] [text <| e.method ++ "ERROR" ]
+                , p [] [ text e.message]
+                , button [ onClick <| DismissAlert ]
+                    [ text "close" ]
+                ]
+
+        Nothing -> text ""
+
 view : Model -> Html Msg
 view model =
-    div []  <| gameView model
+    div []
+        [ alertView model.error
+        , div [] <| gameView model
+        ]
