@@ -3,8 +3,7 @@
 
 # Yet another one sea battle game
 
-Project is just for fun. Simple Node.js backend + learning Elm by making frontend part. Not completed. There's something to do yet.
-BTW Elm is real pleasure to work with.
+Project is just for fun. Simple Node.js backend + learning Elm by making frontend part. Elm is real pleasure to work with.
 
 ## To install:
 (assuming you have [node (>=8.0.0)](http://nodejs.org/) and NPM installed)
